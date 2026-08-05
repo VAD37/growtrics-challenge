@@ -1,0 +1,82 @@
+# Four services, one image, two entrypoints (D053).
+#   db        Postgres, the only source of truth for state, events, costs, queue (D048)
+#   storage   MinIO, long-term artifact bytes; SQL keeps the pointer (D052)
+#   api       accepts and reads
+#   worker    runner + sweeper, same image, different command
+#
+# Defaults are inline, so `make up` works with no .env file. Override via .env (.env.example).
+
+name: growtrics
+
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: infra/Dockerfile
+
+x-app-env: &app-env
+  APP_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-app}
+  APP_OBJECT_STORE_ENDPOINT: http://storage:9000
+  APP_OBJECT_STORE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  APP_OBJECT_STORE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  APP_OBJECT_STORE_BUCKET: artifacts
+
+x-app-depends: &app-depends
+  db:
+    condition: service_healthy
+  storage:
+    condition: service_healthy
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # @TODO create the artifacts bucket on first start; nothing writes to it until custody exists.
+  storage:
+    image: minio/minio:latest # @TODO pin a release tag once the object-store adapter lands
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - storage-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    <<: *app-image
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment: *app-env
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on: *app-depends
+    restart: unless-stopped
+
+  worker:
+    <<: *app-image
+    command: ["python", "-m", "app.worker"]
+    environment: *app-env
+    depends_on: *app-depends
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  storage-data:

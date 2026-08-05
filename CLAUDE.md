@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Reference
 
-Read before changing anything. Docs are the source of truth; no application code exists yet.
+Read before changing anything. Docs are the source of truth. Only the spine exists in code:
+packages, two entrypoints, `/health`, and compose. Build order is `docs/plan/15-demo-cut.md`.
 
 | Doc | Contents |
 |-----|----------|
@@ -44,50 +45,58 @@ Source brief: `Agentic_Backend_Challenge_AI_Chemistry_Video_Request_Service.pdf`
 - Tests: `pytest` + `pytest-asyncio` (auto mode), rooted at `tests/`.
 - Mandated framework once code starts: FastAPI + Pydantic v2 (requirement R1).
 - Persistence: Postgres is the only source of truth (D048). Object storage holds artifact
-  bytes. Both run in `deploy/docker-compose.yml`.
+  bytes. Both run in `docker-compose.yml` at the repository root (D094).
+- `import-linter` contracts in `pyproject.toml` enforce the dependency rule. Run
+  `uv run lint-imports`. @TODO no CI runs them yet.
 
 ## Commands
 
 ```bash
+make up                      # build and start db, storage, api, worker
+make down                    # stop them
 uv sync                      # create .venv, install deps + dev group
 uv run ruff check .          # lint
 uv run ruff check --fix .    # lint with autofix
 uv run ruff format .         # format
 uv run pytest                # all tests
 uv run pytest tests/path_test.py::test_name   # single test
+uv run lint-imports          # architecture contracts
 uv add <pkg>                 # add runtime dep
 uv add --dev <pkg>           # add dev dep
 ```
 
 ## Structure
 
+One package per bounded context, per `docs/plan/03-module-layout.md`. Every package below is a
+docstring and nothing else so far; `domain/` imports nothing, `api/` imports no adapter.
+
 ```
 .
+├── docker-compose.yml    db, storage, api, worker (D053, D094)
+├── Makefile              up, down
+├── infra/Dockerfile      one image, two entrypoints
+├── .env.example          every value is also a compose default
+├── src/app/
+│   ├── main.py           API entrypoint + composition root; /health only
+│   ├── worker.py         runner + sweeper entrypoint; idles
+│   ├── config.py         settings, the only reader of the environment
+│   ├── api/              FastAPI routers and schemas, no domain rules
+│   ├── domain/           pure types, aggregates, events, failure codes
+│   ├── orchestration/    CORE: job use cases + workflow engine + steps
+│   ├── intake/           CORE: sanitise, guard, classify, seal the LessonBrief
+│   ├── custody/          harvest, verify, store, serve artifacts
+│   ├── generation/       ACL over the external agent worker; ports + fakes
+│   ├── access/           principal, entitlement, balance (stub)
+│   ├── observability/    events, metrics, tracing (all written to SQL)
+│   └── storage/          sql/ + objects/ adapters; memory/ test doubles
+├── tests/{unit,contract,redteam,integration}/
 ├── docs/
 │   ├── challenges/       round-1 docs + extracted requirements
 │   ├── plan/             round-2 design (see Reference)
 │   ├── decisions.md      append-only
 │   ├── open-questions.md
 │   └── notes.md          captured input context
-├── pyproject.toml        deps, ruff, pytest config
+├── pyproject.toml        deps, ruff, pytest, import-linter config
 ├── .python-version       3.14
 └── README.md             intentionally minimal
-```
-
-Planned layout once implementation starts, per `docs/plan/03-module-layout.md`. One package
-per bounded context; `domain/` imports nothing, `api/` imports no adapter:
-
-```
-src/app/
-├── api/             FastAPI routers and schemas, no domain rules
-├── domain/          pure types, aggregates, events, failure codes
-├── orchestration/   CORE: job use cases + workflow engine + steps
-├── intake/          CORE: sanitise, guard, classify, seal the LessonBrief
-├── custody/         harvest, verify, store, serve artifacts
-├── generation/      ACL over the external agent worker; ports + fakes
-├── access/          principal, entitlement, balance (stub)
-├── observability/   events, metrics, tracing (all written to SQL)
-└── storage/         SQL repositories + queue + outbox; object store; in-memory test doubles
-tests/{unit,contract,redteam,integration}/
-deploy/              docker-compose.yml (db, storage, api, worker) + Dockerfile
 ```
