@@ -34,21 +34,42 @@ class Settings(BaseSettings):
     work_lease_seconds: int = 60
     """How long a claim holds a `work_items` row before its `claimed_until` passes.
 
-    @TODO nothing reacts to a lease expiring yet; see `app/storage/sql/queue.py::reclaim`.
+    A lapsed lease is what the sweeper reads as "the holder is not coming back", so this is also
+    the shortest time a dead worker's job can sit still.
     """
 
     work_claim_poll_seconds: float = 2.0
     work_max_concurrent_jobs: int = 1
     work_max_claims: int = 3
-    """Past this many claims an item is failed rather than retried.
+    """How many times one item may be handed back before the job is failed instead.
 
-    @TODO read by the reclaim path, which is a stub (scope override item 8).
+    A row that has burned this many workers is not going to survive the next one, and handing it
+    back forever is how a poison item eats a queue.
     """
 
     job_stale_seconds: int = 900
-    """How long a `RUNNING` job may sit untouched before an operator should look at it.
+    """How long a `RUNNING` job may sit untouched before the sweeper gives up on it.
 
-    @TODO nothing sweeps on this; it is here so the timeout system has its number written down.
+    `jobs.updated_at` moves on every stage transition, so fifteen minutes inside one stage is a
+    hang rather than a slow render. Read by `orchestration/engine/sweeper.py::fail_stale_jobs`.
+
+    @TODO one number for every stage. A per-stage deadline would let `GENERATING` have longer
+    than `PUBLISHING` instead of the whole run sharing the loosest bound.
+    """
+
+    job_pending_max_seconds: int = 3600
+    """How long a job may sit `QUEUED` before it is failed for never having been claimed.
+
+    The release valve on a backlog: at 50k items deep the honest answer to a job nobody will
+    reach today is `FAILED`, not a queue that grows without bound. Read by
+    `orchestration/engine/sweeper.py::fail_pending_jobs`.
+    """
+
+    sweep_interval_seconds: float = 60.0
+    """How often the worker's sweep ticker runs.
+
+    It runs in the worker process and never in a request handler: a request dies with its
+    connection and a backlog does not.
     """
 
     # --- paging --------------------------------------------------------------------

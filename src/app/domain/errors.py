@@ -4,9 +4,11 @@ D062: `domain/errors.py` holds one `ErrorCode` enum and one `ERROR_CATALOG`, and
 written at a raise site. A raise carries a code and, at most, machine-readable details; the
 words a learner reads are looked up here. One place to audit for leaks, one place to translate.
 
-The eight codes are `docs/demo.md`, "Errors". `plan/14-api-schema.md` names two more
-(`OUTPUT_PROFILE_NOT_SUPPORTED`, `DELIVERABLE_INCOMPLETE`) that the demo cannot reach; members
-are added and never removed (D072), so those arrive with the stage that raises them.
+Eight codes are `docs/demo.md`, "Errors". `JOB_TIMED_OUT` is the ninth and arrived with the
+timeout sweep: it is the second job-failure code, so `docs/demo.md` needs the row.
+`plan/14-api-schema.md` names two more (`OUTPUT_PROFILE_NOT_SUPPORTED`,
+`DELIVERABLE_INCOMPLETE`) that the demo cannot reach; members are added and never removed
+(D072), so those arrive with the stage that raises them.
 """
 
 from collections.abc import Mapping
@@ -27,6 +29,7 @@ class ErrorCode(StrEnum):
     ARTIFACT_NOT_READY = "ARTIFACT_NOT_READY"
     TOO_MANY_ACTIVE_JOBS = "TOO_MANY_ACTIVE_JOBS"
     GENERATION_FAILED = "GENERATION_FAILED"
+    JOB_TIMED_OUT = "JOB_TIMED_OUT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +79,10 @@ ERROR_CATALOG: Final[Mapping[ErrorCode, ErrorEntry]] = MappingProxyType(
         ErrorCode.GENERATION_FAILED: ErrorEntry(
             http_status=None,
             message="The lesson could not be generated.",
+        ),
+        ErrorCode.JOB_TIMED_OUT: ErrorEntry(
+            http_status=None,
+            message="The lesson took too long and was given up on.",
         ),
     }
 )

@@ -224,6 +224,23 @@ class JobRepository(Protocol):
         """
         ...
 
+    async def list_untouched_since(
+        self, status: JobStatus, moment: datetime, *, limit: int
+    ) -> tuple[JobRecord, ...]:
+        """Jobs still in `status` whose row has not been written since `moment`, oldest first.
+
+        Inclusive at `moment`, which is `policy.lease_expired`'s convention: at the edge, the
+        wait is over.
+
+        The sweep's read (`engine/sweeper.py`). No scope for the same reason `load_for_run` has
+        none: the system is reading its own backlog, and a scope here would imply a caller who
+        could ask for somebody else's.
+
+        Oldest first, and capped, because the case this exists for is a queue tens of thousands
+        deep: a sweep that drains the worst of it every tick beats one that reads all of it once.
+        """
+        ...
+
     async def apply_transition(self, transition: JobTransition) -> JobRecord:
         """The only write to `jobs` in the system (D066). Returns the row as it now stands."""
         ...
@@ -273,8 +290,7 @@ class WorkQueue(Protocol):
         """Hand a claim back untouched, so the row is immediately claimable again.
 
         Called on a clean stop between claiming and starting, and on no other path. A process
-        that dies must NOT reach this: an abandoned lease has to expire so the deferred reclaim
-        can find it (scope override item 8).
+        that dies must NOT reach this: an abandoned lease has to expire so the sweep can find it.
         """
         ...
 
@@ -283,15 +299,37 @@ class WorkQueue(Protocol):
         ...
 
     async def reclaim(self, now: datetime, max_claims: int) -> int:
-        """@TODO DEFERRED, scope override item 8. Nothing calls this.
+        """Hand every lapsed claim back. Returns the rows made claimable again.
 
-        The eventual implementation clears `claimed_by` and `claimed_until` on rows where
-        `claimed_until < now`, increments `claim_count`, and deletes rows past `max_claims`
-        (`config.work_max_claims`). It needs `work_items` and nothing else: `workflow_runs` is
-        not created in migration 1 (D093) and the three columns are already there.
+        Clears `claimed_by` and `claimed_until` and increments `claim_count` on every row with
+        `claimed_until <= now`, so the next worker to poll can have it. A row that has already
+        reached `max_claims` (`config.work_max_claims`) is left exactly where it is: handing it
+        back a fourth time is how a poison item eats a queue, and `exhausted` is where it goes
+        instead.
 
-        Until it exists, a worker that dies mid-job leaves its row claimed forever and its job
-        sits at `RUNNING`. See `app/orchestration/engine/sweeper.py`.
+        `work_items` and nothing else. `workflow_runs` is not created in migration 1 (D093), and
+        the three columns this needs are already there.
+        """
+        ...
+
+    async def exhausted(self, now: datetime, max_claims: int) -> tuple[ClaimedWorkItem, ...]:
+        """Lapsed rows that have been handed back `max_claims` times: what `reclaim` will not.
+
+        Separate from `reclaim` because the two outcomes are written by different owners. Giving
+        a row back is the queue's business; giving up on the job it points at is orchestration's,
+        and only `JobRepository.apply_transition` can do it (D066).
+
+        `now` is carried so a row on its last claim that a live worker is still holding is not in
+        this set. Its lease has not lapsed, so it has not failed yet.
+        """
+        ...
+
+    async def discard(self, item_id: WorkItemId) -> bool:
+        """Delete a row whoever holds it. `True` when a row went.
+
+        `complete` needs an owner to match and a swept row has none worth naming: it is either
+        unclaimed or held by a process that is not coming back. A `FAILED` job whose queue row
+        outlived it is a row the next worker claims and the runner then drops, forever.
         """
         ...
 

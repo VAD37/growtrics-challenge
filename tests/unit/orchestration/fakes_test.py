@@ -56,6 +56,7 @@ from app.domain.records import (
     Page,
     StoredRequest,
 )
+from app.orchestration.engine.policy import lease_expired
 from app.orchestration.ports import (
     AdmissionPolicy,
     ArtifactDescriptor,
@@ -273,6 +274,19 @@ class FakeJobRepository:
     async def load_for_run(self, job_id: JobId) -> JobRecord | None:
         return self.rows.get(job_id)
 
+    async def list_untouched_since(
+        self, status: JobStatus, moment: datetime, *, limit: int
+    ) -> tuple[JobRecord, ...]:
+        ordered = sorted(
+            (
+                job
+                for job in self.rows.values()
+                if job.status is status and job.updated_at <= moment
+            ),
+            key=lambda job: (job.updated_at, job.job_id),
+        )
+        return tuple(ordered[:limit])
+
     async def apply_transition(self, transition: JobTransition) -> JobRecord:
         self.transitions.append(transition)
         current = self.rows[transition.job_id]
@@ -337,19 +351,34 @@ class FakeUnitOfWork:
 
 @dataclass(slots=True)
 class FakeWorkQueue:
-    """`work_items` in a list. Claims hand out a lease; nothing here expires one."""
+    """`work_items` in a list, with the lease arithmetic the sweep reads.
+
+    `counts` is `work_items.claim_count` per row: how many times the sweep has taken this row off
+    a holder that never came back. A fresh row is at zero, and `reclaim` is the only thing that
+    moves it, which is what makes `work_max_claims` a count of dead workers rather than of runs.
+    """
 
     clock: FrozenClock = field(default_factory=FrozenClock)
     available: list[QueuedWorkItem] = field(default_factory=list)
     claimed: dict[WorkItemId, ClaimedWorkItem] = field(default_factory=dict)
     completed: list[WorkItemId] = field(default_factory=list)
     released: list[WorkItemId] = field(default_factory=list)
+    discarded: list[WorkItemId] = field(default_factory=list)
+    counts: dict[WorkItemId, int] = field(default_factory=dict)
     heartbeats: list[tuple[WorkItemId, datetime]] = field(default_factory=list)
     heartbeat_returns_none_after: int | None = None
     claim_count: int = 0
+    sweep_error: Exception | None = None
+    """Raised by the two reads a sweep tick makes, so a test can break one tick and no more."""
 
     def seed(self, item: QueuedWorkItem) -> QueuedWorkItem:
         self.available.append(item)
+        return item
+
+    def seed_claimed(self, item: ClaimedWorkItem) -> ClaimedWorkItem:
+        """Put a row in the state a dead worker leaves behind: claimed, with a lease to lapse."""
+        self.claimed[item.item_id] = item
+        self.counts[item.item_id] = item.claim_count
         return item
 
     async def claim(self, owner: str, lease_seconds: int) -> ClaimedWorkItem | None:
@@ -362,7 +391,7 @@ class FakeWorkQueue:
             job_id=item.job_id,
             claimed_by=owner,
             claimed_until=self.clock.now() + timedelta(seconds=lease_seconds),
-            claim_count=self.claim_count,
+            claim_count=self.counts.get(item.item_id, 0),
         )
         self.claimed[item.item_id] = claimed
         return claimed
@@ -408,8 +437,43 @@ class FakeWorkQueue:
         self.completed.append(item_id)
 
     async def reclaim(self, now: datetime, max_claims: int) -> int:
-        del now, max_claims
-        raise NotImplementedError
+        if self.sweep_error is not None:
+            raise self.sweep_error
+        handed_back = 0
+        for item_id, held in list(self.claimed.items()):
+            if not lease_expired(held.claimed_until, now):
+                continue
+            if held.claim_count >= max_claims:
+                continue
+            del self.claimed[item_id]
+            self.counts[item_id] = held.claim_count + 1
+            self.available.append(
+                QueuedWorkItem(
+                    item_id=held.item_id,
+                    job_id=held.job_id,
+                    available_at=now,
+                    created_at=now,
+                )
+            )
+            handed_back += 1
+        return handed_back
+
+    async def exhausted(self, now: datetime, max_claims: int) -> tuple[ClaimedWorkItem, ...]:
+        if self.sweep_error is not None:
+            raise self.sweep_error
+        return tuple(
+            held
+            for held in self.claimed.values()
+            if lease_expired(held.claimed_until, now) and held.claim_count >= max_claims
+        )
+
+    async def discard(self, item_id: WorkItemId) -> bool:
+        held = self.claimed.pop(item_id, None)
+        waiting = [item for item in self.available if item.item_id == item_id]
+        for item in waiting:
+            self.available.remove(item)
+        self.discarded.append(item_id)
+        return held is not None or bool(waiting)
 
 
 @dataclass(slots=True)

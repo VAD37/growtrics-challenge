@@ -14,14 +14,14 @@ The lease discipline is the part worth reading twice.
   D2).
 - A **stop between claiming and starting** calls `release`, so a shutdown does not park a job for
   a whole lease. That is the only path that releases.
-- **A crash never releases.** An abandoned lease has to expire so the deferred reclaim can find
-  it. @TODO nothing reacts to an expired lease yet (scope override item 8): a worker that dies
-  mid-job leaves its row claimed forever and its job sits at `RUNNING`. See
-  `app/orchestration/engine/sweeper.py` for what fills that in.
+- **A crash never releases.** An abandoned lease has to expire so the sweep can find it
+  (`app/orchestration/engine/sweeper.py`).
 - SIGTERM and SIGINT stop the claiming and drain the job in hand rather than dropping it.
 
-No sweeper task is started here, deliberately. A sweeper that runs and does nothing looks like a
-timeout system.
+The sweep runs here too, as its own task on a ticker beside the claim loop (`run_with_sweep`).
+This is the process that has one: a FastAPI handler dies with its request, and a backlog that is
+only swept while somebody is polling is not swept. The two tasks share one `asyncio.Event`, so
+one SIGTERM drains the job in hand and stops the ticker behind it.
 """
 
 import asyncio
@@ -141,7 +141,8 @@ class WorkerLoop:
             # The runner turns a failed lesson into a FAILED job, so reaching here means the
             # runner or an adapter itself broke. The claim is deliberately left in place: the
             # row must not be handed straight back to be run again, and its expiry is the only
-            # trace of what happened. @TODO see sweeper.py.
+            # trace of what happened. The sweep reads that expiry and hands the row back, or
+            # fails the job once it has burned `work_max_claims` workers.
             logger.exception("work item %s left claimed after an unhandled error", item.item_id)
             return True
         await self._queue.complete(item.item_id, self._config.owner)
@@ -198,12 +199,37 @@ def _install_signal_handlers(stop: asyncio.Event) -> None:
             signal.signal(received, lambda *_: stop.set())
 
 
-def build_worker(stop: asyncio.Event) -> WorkerLoop:
+async def run_with_sweep(worker: WorkerLoop, sweep: Awaitable[None]) -> None:
+    """Run the claim loop and the sweep ticker side by side under one stop signal.
+
+    The sweep is its own task so a slow tick never delays a claim, and the claim loop is the one
+    that decides when the process is done: SIGTERM drains the job in hand, and the ticker is
+    cancelled behind it because a backlog scan is not worth holding a shutdown open for.
+
+    `run_sweeper` swallows a failing tick itself, so an exception arriving here is the ticker
+    rather than the sweep. It is logged and not re-raised: the worker has already drained, and a
+    dead sweeper must not turn a clean shutdown into a crash loop.
+    """
+    sweeping = asyncio.ensure_future(sweep)
+    try:
+        await worker.run_forever()
+    finally:
+        sweeping.cancel()
+        try:
+            await sweeping
+        except asyncio.CancelledError:
+            logger.info("sweep ticker cancelled on shutdown")
+        except Exception:
+            logger.exception("the sweep ticker died; the worker drained anyway")
+
+
+def build_worker(stop: asyncio.Event) -> tuple[WorkerLoop, Awaitable[None]]:
     """@TODO wire the adapters. The composition root owns this and it is not merged yet.
 
     It needs the SQL work queue (`app/storage/sql/queue.py`), the SQL job and request
     repositories, the intake, generation and custody services, and a real clock, assembled into
-    a `JobRunner` exactly as `app/main.py` assembles the API side. Nothing in this module is
+    a `JobRunner` exactly as `app/main.py` assembles the API side, plus a `run_sweeper(...)`
+    coroutine over the same queue, job repository, clock and `stop`. Nothing in this module is
     allowed to import an adapter itself: `app.orchestration` may not reach `app.storage`, and
     keeping the entrypoint on the same rule is what stops that contract being routed around.
     """
@@ -215,16 +241,18 @@ def build_worker(stop: asyncio.Event) -> WorkerLoop:
 async def _serve() -> None:
     stop = asyncio.Event()
     _install_signal_handlers(stop)
-    await build_worker(stop).run_forever()
+    worker, sweep = build_worker(stop)
+    await run_with_sweep(worker, sweep)
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     logger.info(
-        "worker starting: lease %ss, poll %ss, %s job at a time",
+        "worker starting: lease %ss, poll %ss, %s job at a time, sweeping every %ss",
         settings.work_lease_seconds,
         settings.work_claim_poll_seconds,
         settings.work_max_concurrent_jobs,
+        settings.sweep_interval_seconds,
     )
     asyncio.run(_serve())
 
