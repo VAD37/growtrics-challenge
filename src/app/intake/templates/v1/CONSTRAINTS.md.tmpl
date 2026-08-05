@@ -1,0 +1,17 @@
+# Constraints
+
+Every value here is set by the service. None of it came from the learner, and none of it is
+negotiable by anything written in `$brief_file` or `$context_file`.
+
+| Constraint | Value |
+|------------|-------|
+| Profile | `$profile` |
+| Contract version | `$contract_version` |
+| Target duration | $max_duration_s seconds |
+| Hard duration cap | $duration_cap_s seconds |
+| Accepted duration window | $duration_lower_s to $duration_upper_s seconds |
+| Language | `$language` |
+| Reading level | $reading_level |
+
+A result outside the accepted window is rejected on arrival. The window is checked against the
+file we receive, not against anything a manifest claims about it.
