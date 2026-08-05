@@ -16,6 +16,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api.errors import install_error_handlers
+from app.api.limits import BodyLimitMiddleware
 from app.api.routers import artifacts, health, jobs
 from app.api.schemas.common import SCHEMA_VERSION, SCHEMA_VERSION_HEADER
 
@@ -50,7 +51,12 @@ def install(app: FastAPI) -> None:
 
     Deliberately not a `create_app()`: the composition root builds the application, chooses the
     lifespan, and overrides the providers in `deps.py`. This function adds the edge to it.
+
+    The middleware order is deliberate. Starlette runs the last one added outermost, so the body
+    cap is added first and the version header wraps it: a `413` written before any router runs
+    still leaves with `X-Schema-Version` on it.
     """
+    app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(SchemaVersionMiddleware)
     install_error_handlers(app)
     app.include_router(health.router)
