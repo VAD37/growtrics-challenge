@@ -21,5 +21,54 @@ class Settings(BaseSettings):
     object_store_secret_key: str = "minioadmin"
     object_store_bucket: str = "artifacts"
 
+    # --- admission -----------------------------------------------------------------
+    admission_max_active_jobs: int = 3
+    """Capacity gate, not a rate limit (D090).
+
+    A principal already holding this many `QUEUED` or `RUNNING` jobs gets
+    `429 TOO_MANY_ACTIVE_JOBS`. It answers "can it handle a new job" with one indexed count,
+    and it is the only abuse control left standing after cost metering was cut.
+    """
+
+    # --- queue and worker ----------------------------------------------------------
+    work_lease_seconds: int = 60
+    """How long a claim holds a `work_items` row before its `claimed_until` passes.
+
+    @TODO nothing reacts to a lease expiring yet; see `app/storage/sql/queue.py::reclaim`.
+    """
+
+    work_claim_poll_seconds: float = 2.0
+    work_max_concurrent_jobs: int = 1
+    work_max_claims: int = 3
+    """Past this many claims an item is failed rather than retried.
+
+    @TODO read by the reclaim path, which is a stub (scope override item 8).
+    """
+
+    job_stale_seconds: int = 900
+    """How long a `RUNNING` job may sit untouched before an operator should look at it.
+
+    @TODO nothing sweeps on this; it is here so the timeout system has its number written down.
+    """
+
+    # --- paging --------------------------------------------------------------------
+    page_default_limit: int = 20
+    page_max_limit: int = 100
+
+    # --- limits --------------------------------------------------------------------
+    artifact_total_max_bytes: int = 83886080
+    """80 MiB, the `video.short.v1` total from `plan/14-api-schema.md`."""
+
+    request_max_body_bytes: int = 65536
+
+    # --- identity ------------------------------------------------------------------
+    default_principal_id: str = "u_demo"
+    """Used when `X-User-Id` is absent.
+
+    @audit there is no authentication. The header names the caller and is never verified, and
+    a request without one becomes this principal rather than a `401`. See
+    `app/domain/access.py`.
+    """
+
 
 settings = Settings()
