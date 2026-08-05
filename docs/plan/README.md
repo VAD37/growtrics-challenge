@@ -25,12 +25,13 @@ types a client touches.
 | `06-trust-boundary.md` | How user text and agent output are contained |
 | `07-distribution.md` | Queues, leases, delivery guarantees, failure domains |
 | `08-observability.md` | Events, metrics, and what the user can see of their own job |
-| `09-generation-worker.md` | The deferred agent service, as an interface only |
+| `09-generation-worker.md` | The deferred agent service, as an interface only. Superseded on the seam by `15` (D101) |
 | `10-scope-matrix.md` | Build, stub, or ignore, per subsystem |
 | `11-triage.md` | Review round 2b against the plan: what it confirmed, what it changed |
 | `12-data-control.md` | Who owns which data, who may see it, and the stripped-down API-to-output picture |
 | `13-mvp.md` | The frozen SQL schema and API contract, and the staged build checklist |
 | `14-api-schema.md` | The edge types themselves: request schema, job document, and what a deliverable is |
+| `15-engine-seam.md` | How the backend hands work to the video engine and verifies what comes back |
 
 The picked scope is not in this directory. `../demo.md` is the approved subset that gets built:
 six endpoints, six tables, four stages (D085, D100).

@@ -202,7 +202,8 @@ correct at this stage.
 
 - [ ] Worker entrypoint: claim a work item with `FOR UPDATE SKIP LOCKED`, hold a lease
 - [ ] `intake`: sanitiser, `SanitisedText`, seal the brief, insert the row, render the file set
-- [ ] `generation`: port plus `ScriptedBackend` returning a committed fixture video
+- [ ] `generation`: port plus `ScriptedBackend` writing a `result.json` and a committed
+      fixture video, in the shape `plan/15-engine-seam.md` defines
 - [ ] `custody`: harvest with the path allowlist, size cap, `ResultValidator` against
       `video.short.v1`, write bytes to object storage, insert the artifact row
 - [ ] Status transitions and the stage-to-percent map, written by `orchestration` only
@@ -264,7 +265,7 @@ change to a table the demo writes.
 | Real auth | replace the header resolver, one function |
 | Cancel, `/v1/me`, deliverable, `/v1/jobs/{id}/content` | additive endpoints, no schema change |
 | Guard, classifier, red-team corpus | inside `intake`, no schema change |
-| Real generation | replace `ScriptedBackend`, no schema change |
+| Real generation | replace `ScriptedBackend` with the engine in `../growtrics-llm-engine`, no schema change (D101) |
 
 ## Honest note on what this proves
 

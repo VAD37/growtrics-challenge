@@ -17,7 +17,7 @@ packages, two entrypoints, `/health`, and compose. Build order is `docs/demo.md`
 | `docs/decisions.md` | Append-only decision log, one line each. Current state of every choice |
 | `docs/open-questions.md` | Deferred choices and what closes each |
 | `docs/notes.md` | Input context from review rounds, captured verbatim. Input, not decision |
-| `docs/plan/` | Design, not scope. Start at `plan/README.md`. `plan/13-mvp.md` holds the frozen SQL schema and `/v1` contract that `docs/demo.md` subsets; `plan/12-data-control.md` is the system in one diagram; `plan/14-api-schema.md` holds the edge types and what a deliverable is |
+| `docs/plan/` | Design, not scope. Start at `plan/README.md`. `plan/13-mvp.md` holds the frozen SQL schema and `/v1` contract that `docs/demo.md` subsets; `plan/12-data-control.md` is the system in one diagram; `plan/14-api-schema.md` holds the edge types and what a deliverable is; `plan/15-engine-seam.md` is how we talk to the video engine |
 | `docs/challenges/00-requirements.md` | Brief extracted from the PDF, with stable ids (R/Q/N/D) |
 | `docs/challenges/01-05` | Round-1 design. Superseded on the generation path by `plan/`, see D023 |
 
@@ -29,8 +29,12 @@ Source brief: `Agentic_Backend_Challenge_AI_Chemistry_Video_Request_Service.pdf`
   existing line; supersede it and cite the old id.
 - Design discussion belongs in `docs/`, not here and not in `README.md`.
 - Requirement ids (`R1`, `Q2`, `N3`, `D5`) are stable. Cite them instead of restating the brief.
-- Media tech (renderer, TTS, agent template repo, LLM provider) is deliberately unchosen. Add
-  candidates to `docs/open-questions.md`; do not pick one silently.
+- Media tech (renderer, TTS, agent template repo, LLM provider) is deliberately unchosen here.
+  It is being chosen in the engine repository, which is a separate decision log. Add candidates
+  to `docs/open-questions.md`; do not pick one silently on this side.
+- The video engine is a separate repository, `../growtrics-llm-engine`. Its `docs/` is the
+  contract and ours is `plan/15-engine-seam.md` (D105). We send one `context.json`, poll for
+  `out/result.json`, and verify the bytes. We never tell it how to generate.
 - Deferred work is `@TODO` in code. Unproven security assumptions are `@audit`. Neither is
   dropped silently.
 - Build only what `docs/demo.md` lists, in its stage order (D085, D100).
