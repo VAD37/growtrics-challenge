@@ -7,7 +7,8 @@ import pytest
 from app.domain.errors import ERROR_CATALOG, DomainError, ErrorCode, ErrorEntry
 
 # docs/demo.md, "Errors". Transcribed rather than imported, so a change to the module has to
-# be a deliberate change to this table too.
+# be a deliberate change to this table too. `JOB_TIMED_OUT` arrived with the timeout sweep and
+# is the second code with no status: @TODO docs/demo.md still lists eight rows.
 DEMO_TABLE: dict[str, int | None] = {
     "INVALID_REQUEST": 400,
     "UNAUTHENTICATED": 401,
@@ -17,7 +18,14 @@ DEMO_TABLE: dict[str, int | None] = {
     "ARTIFACT_NOT_READY": 409,
     "TOO_MANY_ACTIVE_JOBS": 429,
     "GENERATION_FAILED": None,
+    "JOB_TIMED_OUT": None,
 }
+
+JOB_FAILURE_CODES: frozenset[str] = frozenset(
+    name for name, status in DEMO_TABLE.items() if status is None
+)
+"""A code with no status is a job outcome, not a rejected request. That is the predicate
+`orchestration/engine/policy.py::classify_failure` branches on."""
 
 
 # --------------------------------------------------------------------------- the enum
@@ -33,7 +41,7 @@ def test_error_code_values_equal_their_names() -> None:
         assert code.value == code.name
 
 
-def test_the_demo_needs_exactly_these_eight_codes() -> None:
+def test_the_demo_needs_exactly_the_codes_in_the_table() -> None:
     assert {code.value for code in ErrorCode} == set(DEMO_TABLE)
 
 
@@ -49,13 +57,14 @@ def test_catalog_http_statuses_match_the_demo_table() -> None:
         assert ERROR_CATALOG[code].http_status == DEMO_TABLE[code.value]
 
 
-def test_generation_failed_is_a_job_failure_and_not_an_http_status() -> None:
-    assert ERROR_CATALOG[ErrorCode.GENERATION_FAILED].http_status is None
+def test_a_job_failure_carries_no_http_status() -> None:
+    for name in JOB_FAILURE_CODES:
+        assert ERROR_CATALOG[ErrorCode(name)].http_status is None
 
 
-def test_every_other_code_carries_a_client_facing_status() -> None:
+def test_every_request_rejection_carries_a_client_facing_status() -> None:
     for code, entry in ERROR_CATALOG.items():
-        if code is ErrorCode.GENERATION_FAILED:
+        if code.value in JOB_FAILURE_CODES:
             continue
         assert entry.http_status is not None
         assert 400 <= entry.http_status < 500
