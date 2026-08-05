@@ -81,4 +81,48 @@ type = "forbidden"
 source_modules = ["app.orchestration"]
 forbidden_modules = ["app.api", "app.storage"]
 
+# One package speaks each protocol. A module that imports a driver has reached around its port,
+# and the query it then writes is a database call nobody can find. `app.storage.sql` and
+# `app.storage.objects` are absent from the sources below because they are the exceptions.
+# tests/unit/storage/sql_discipline_test.py says the same thing and also names every statement.
+[[tool.importlinter.contracts]]
+name = "postgres is spoken in one package"
+type = "forbidden"
+source_modules = [
+    "app.api",
+    "app.domain",
+    "app.orchestration",
+    "app.intake",
+    "app.custody",
+    "app.generation",
+    "app.access",
+    "app.observability",
+    "app.storage.memory",
+    "app.storage.objects",
+    "app.config",
+    "app.main",
+    "app.worker",
+]
+forbidden_modules = ["psycopg", "sqlalchemy"]
+
+[[tool.importlinter.contracts]]
+name = "object storage is spoken in one package"
+type = "forbidden"
+source_modules = [
+    "app.api",
+    "app.domain",
+    "app.orchestration",
+    "app.intake",
+    "app.custody",
+    "app.generation",
+    "app.access",
+    "app.observability",
+    "app.storage.memory",
+    "app.storage.sql",
+    "app.config",
+    "app.main",
+    "app.worker",
+]
+forbidden_modules = ["boto3"]
+
 # @TODO independence contract over app.orchestration.steps.* once the step modules exist.
