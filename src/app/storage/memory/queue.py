@@ -48,6 +48,11 @@ class MemoryWorkQueue:
 
         Oldest by `available_at` with the item id breaking ties, so the order out is the order
         in even when the rows were not inserted in it.
+
+        `claim_count` is left where it stands. It counts the workers a row has burned, not the
+        times it has been handed out, and only `reclaim` can tell the difference: a claim that
+        ends in `complete` burned nobody. Counting here instead would spend `max_claims` on
+        successful runs and fail a job for having been worked on.
         """
         now = self._clock.now()
         claimable = [row for row in self._database.work_items.values() if row.is_claimable(now)]
@@ -57,7 +62,7 @@ class MemoryWorkQueue:
         held = oldest.claimed(
             owner=owner,
             until=now + timedelta(seconds=lease_seconds),
-            claim_count=oldest.claim_count + 1,
+            claim_count=oldest.claim_count,
         )
         self._database.work_items[held.item_id] = held
         return held.as_claimed()

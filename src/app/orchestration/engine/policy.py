@@ -69,7 +69,8 @@ def lease_deadline(now: datetime, lease_seconds: int) -> datetime:
 def lease_expired(claimed_until: datetime, now: datetime) -> bool:
     """Whether a claim has lapsed. Inclusive at the deadline: at the edge, the holder is late.
 
-    @TODO nothing in the demo calls this on the live queue. It is the predicate the deferred
-    reclaim will use (scope override item 8); see `sweeper.py`.
+    The predicate `WorkQueue.reclaim` and `WorkQueue.exhausted` split lapsed rows on. Imported by
+    the adapters rather than restated, because "inclusive at the deadline" is a decision and a
+    second copy of `<=` is a decision nobody knows they are changing.
     """
     return claimed_until <= now

@@ -117,7 +117,8 @@ async def test_a_claim_holds_a_lease_and_hides_the_row_from_everyone_else(
     assert claimed is not None
     assert claimed.claimed_by == OWNER
     assert claimed.claimed_until == T0 + timedelta(seconds=LEASE_SECONDS)
-    assert claimed.claim_count == 1
+    # Still zero. A row being worked on has burned nobody yet; only `reclaim` counts.
+    assert claimed.claim_count == 0
     assert await queue.claim(OTHER_OWNER, LEASE_SECONDS) is None
 
 
@@ -184,10 +185,12 @@ async def test_release_hands_the_row_straight_back(
 
     row = database.work_items[claimed.item_id]
     assert row.claimed_by is None
-    assert row.claim_count == 1
+    # A clean stop is not a burned worker. `release` costs the row nothing, and neither does the
+    # claim after it, or a worker restarting would spend `max_claims` on nothing going wrong.
+    assert row.claim_count == 0
     reclaimed = await queue.claim(OTHER_OWNER, LEASE_SECONDS)
     assert reclaimed is not None
-    assert reclaimed.claim_count == 2
+    assert reclaimed.claim_count == 0
 
 
 async def test_release_by_a_stranger_leaves_the_claim_alone(
