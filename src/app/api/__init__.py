@@ -17,7 +17,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api.errors import install_error_handlers
 from app.api.limits import BodyLimitMiddleware
-from app.api.routers import artifacts, health, jobs
+from app.api.routers import artifacts, events, health, jobs
 from app.api.schemas.common import SCHEMA_VERSION, SCHEMA_VERSION_HEADER
 
 __all__ = ["SchemaVersionMiddleware", "install"]
@@ -47,7 +47,7 @@ class SchemaVersionMiddleware:
 
 
 def install(app: FastAPI) -> None:
-    """Mount the demo's six endpoints on an app the composition root owns.
+    """Mount the demo's endpoints on an app the composition root owns.
 
     Deliberately not a `create_app()`: the composition root builds the application, chooses the
     lifespan, and overrides the providers in `deps.py`. This function adds the edge to it.
@@ -61,4 +61,5 @@ def install(app: FastAPI) -> None:
     install_error_handlers(app)
     app.include_router(health.router)
     app.include_router(jobs.router)
+    app.include_router(events.router)
     app.include_router(artifacts.router)
