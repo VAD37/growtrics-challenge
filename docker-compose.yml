@@ -1,10 +1,17 @@
-# Four services, one image, two entrypoints (D053).
+# Four services, one image, two entrypoints (D053, D094, D095).
 #   db        Postgres, the only source of truth for state, events, costs, queue (D048)
 #   storage   MinIO, long-term artifact bytes; SQL keeps the pointer (D052)
-#   api       accepts and reads
+#   api       accepts and reads; applies the migration before it serves
 #   worker    runner + sweeper, same image, different command
 #
 # Defaults are inline, so `make up` works with no .env file. Override via .env (.env.example).
+#
+# Startup order is a property of this file rather than of a retry loop:
+#   db + storage healthy -> api migrates, then serves -> /health passes -> worker starts.
+# The api container is the only one that runs the migration, so two containers never race to
+# create the same table. It is one line of its command rather than an entrypoint script,
+# because a committed `.sh` on a Windows checkout arrives in the build context with CRLF line
+# endings and `/bin/sh` will not run it.
 
 name: growtrics
 
@@ -18,7 +25,20 @@ x-app-env: &app-env
   APP_OBJECT_STORE_ENDPOINT: http://storage:9000
   APP_OBJECT_STORE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
   APP_OBJECT_STORE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-  APP_OBJECT_STORE_BUCKET: artifacts
+  APP_OBJECT_STORE_BUCKET: ${APP_OBJECT_STORE_BUCKET:-artifacts}
+  # Every remaining setting in src/app/config.py that a deployment would move. Same values as
+  # the Python defaults; passing them explicitly is what makes .env.example complete.
+  APP_ADMISSION_MAX_ACTIVE_JOBS: ${APP_ADMISSION_MAX_ACTIVE_JOBS:-3}
+  APP_WORK_LEASE_SECONDS: ${APP_WORK_LEASE_SECONDS:-60}
+  APP_WORK_CLAIM_POLL_SECONDS: ${APP_WORK_CLAIM_POLL_SECONDS:-2.0}
+  APP_WORK_MAX_CONCURRENT_JOBS: ${APP_WORK_MAX_CONCURRENT_JOBS:-1}
+  APP_WORK_MAX_CLAIMS: ${APP_WORK_MAX_CLAIMS:-3}
+  APP_JOB_STALE_SECONDS: ${APP_JOB_STALE_SECONDS:-900}
+  APP_PAGE_DEFAULT_LIMIT: ${APP_PAGE_DEFAULT_LIMIT:-20}
+  APP_PAGE_MAX_LIMIT: ${APP_PAGE_MAX_LIMIT:-100}
+  APP_ARTIFACT_TOTAL_MAX_BYTES: ${APP_ARTIFACT_TOTAL_MAX_BYTES:-83886080}
+  APP_REQUEST_MAX_BODY_BYTES: ${APP_REQUEST_MAX_BODY_BYTES:-65536}
+  APP_DEFAULT_PRINCIPAL_ID: ${APP_DEFAULT_PRINCIPAL_ID:-u_demo}
 
 x-app-depends: &app-depends
   db:
@@ -43,7 +63,8 @@ services:
       timeout: 3s
       retries: 20
 
-  # @TODO create the artifacts bucket on first start; nothing writes to it until custody exists.
+  # @TODO create the artifacts bucket on first start; the object-store adapter is expected to
+  # create it if absent, so nothing here does it and no fifth service exists to do it either.
   storage:
     image: minio/minio:latest # @TODO pin a release tag once the object-store adapter lands
     command: server /data --console-address ":9001"
@@ -63,18 +84,41 @@ services:
 
   api:
     <<: *app-image
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    # The migration runs to completion before uvicorn binds a port, so a request never meets a
+    # half-built schema and the worker never claims from a table that is not there yet. `exec`
+    # keeps uvicorn as PID 1, so `docker compose down` still reaches it with SIGTERM.
+    command:
+      - sh
+      - -c
+      - python -m app.storage.sql.migrate && exec uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment: *app-env
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on: *app-depends
+    healthcheck:
+      # No curl in the runtime layer, and adding one to run a healthcheck is a package in the
+      # image for the rest of its life. Python is already there.
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request as u; u.urlopen("http://127.0.0.1:8000/health", timeout=3)
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
     restart: unless-stopped
 
   worker:
     <<: *app-image
     command: ["python", "-m", "app.worker"]
     environment: *app-env
-    depends_on: *app-depends
+    depends_on:
+      <<: *app-depends
+      api:
+        # Not a runtime dependency: the worker never calls the API. This waits for the schema,
+        # because the api container is the one that applies it.
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
