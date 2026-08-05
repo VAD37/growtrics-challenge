@@ -38,4 +38,6 @@ COPY --from=builder --chown=app:app /app /app
 USER app
 EXPOSE 8000
 
+# No ENTRYPOINT: the image runs whatever command it is given, and compose gives it one of the
+# two from D095. The api service prefixes its command with the migration; see docker-compose.yml.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
