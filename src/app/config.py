@@ -51,6 +51,32 @@ class Settings(BaseSettings):
     @TODO nothing sweeps on this; it is here so the timeout system has its number written down.
     """
 
+    # --- job event stream ----------------------------------------------------------
+    job_stream_tick_seconds: float = 1.0
+    """How often an open `GET /v1/jobs/{job_id}/events` re-reads its job.
+
+    One `JobService.get` per open connection per tick, and at this default a thousand
+    concurrent streams is a thousand primary-key reads a second whether or not any of those
+    jobs moved. @TODO Postgres `LISTEN`/`NOTIFY` on a `jobs` update deletes this setting
+    along with the tick it configures; see `app/api/routers/events.py`.
+    """
+
+    job_stream_heartbeat_seconds: float = 15.0
+    """How long a stream may go silent before it sends a `: ping` comment.
+
+    Under the shortest idle timeout a proxy is likely to be running, so the connection is
+    proved alive rather than dropped without either end being told.
+    """
+
+    job_stream_max_seconds: float = 900.0
+    """Hard lifetime of one streaming connection.
+
+    An unbounded stream is a resource leak with a feature's name on it. At the cap the server
+    closes cleanly and tells the client to reconnect, which costs one round trip and loses
+    nothing: the client resumes with `Last-Event-ID`. Matches `job_stale_seconds`, so a stream
+    outlives every job an operator would still call healthy.
+    """
+
     # --- paging --------------------------------------------------------------------
     page_default_limit: int = 20
     page_max_limit: int = 100
