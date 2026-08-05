@@ -41,7 +41,8 @@ Source brief: `Agentic_Backend_Challenge_AI_Chemistry_Video_Request_Service.pdf`
 - Mandated framework once code starts: FastAPI + Pydantic v2 (requirement R1).
 - Persistence: Postgres is the only source of truth (D048). Object storage holds artifact
   bytes. Both run in `docker-compose.yml` at the repository root (D075).
-- Architecture is checked, not described: `import-linter` contracts live in `pyproject.toml`.
+- `import-linter` contracts in `pyproject.toml` enforce the dependency rule. Run
+  `uv run lint-imports`. @TODO no CI runs them yet.
 
 ## Commands
 
