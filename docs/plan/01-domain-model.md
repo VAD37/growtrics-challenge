@@ -13,7 +13,9 @@ not here, it should not appear in a type name.
 | Lesson Brief | The sanitised, wrapped, sealed instruction package the backend produces from a Lesson Request. Immutable. The only form of user intent that travels downstream. The notes call this the job prompt, or the plan; same object. |
 | Brief Template | The versioned set of files the brief is rendered through. Where input quality is controlled. |
 | Cost Entry | One step's token and money usage, marked as measured by us or claimed by a worker. |
-| Output Contract | The declaration of what a finished job must produce. Versioned, ours, never the agent's. |
+| Output Contract | The declaration of what a finished job must produce. Versioned, ours, never the agent's. Sent to the worker, then re-used as the acceptance test. |
+| Deliverable Profile | The server-owned id a client asks for, `video.short.v1`. Resolves to one Output Contract. |
+| Deliverable | The complete set of artifacts one job produced, with one designated primary. |
 | Video Job | The unit of work a Principal can name, query, and observe. |
 | Workflow Run | One execution of the job's workflow. A job can have more than one run over its life. |
 | Step | One named unit inside a run, with typed input and output, a retry policy, and a compensation. |
@@ -166,8 +168,10 @@ Artifact
   artifact_id      ArtifactId
   job_id           JobId
   content_hash     Sha256
-  kind             ArtifactKind    # VIDEO POSTER TRANSCRIPT SOURCE LOG
+  role             ArtifactRole    # PRIMARY POSTER TRANSCRIPT CAPTIONS ASSET SOURCE LOG
+  audience         Audience        # LEARNER | OPERATOR
   mime             str
+  rel_path         str | None      # position in a bundle tree; None when standalone
   size_bytes       int
   storage_uri      str             # ours, never the worker's
   probe            MediaProbe      # duration, streams, resolution
@@ -177,6 +181,15 @@ Artifact
 
 Only `CLEAN` artifacts get an id a client can reach. A quarantined candidate keeps a record
 for operators and no public route.
+
+`role`, `mime`, and `audience` are three fields because they answer three questions: what the
+file is for, what format it is, and who may see it. The earlier `ArtifactKind` enum answered the
+first two badly and could not answer the third at all. A harvested agent log passes every safety
+check, is `CLEAN`, and must still never reach a learner. See `14-api-schema.md`.
+
+A job's artifacts together form a **Deliverable**: one primary plus its parts. That is a
+projection over this table, not another aggregate: one job, one brief, one terminal state,
+therefore at most one deliverable, addressed by `job_id`.
 
 ### CostEntry (append-only, keyed by job)
 

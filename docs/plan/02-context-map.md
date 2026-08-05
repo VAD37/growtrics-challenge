@@ -129,7 +129,7 @@ workspace/
   BRIEF.md            rendered from LessonBrief; user text inside a fenced data block
   CONTEXT.md          one labelled section per ContextItem kind
   CONSTRAINTS.md      duration, language, reading level, style
-  OUTPUT_CONTRACT.json  required paths, kinds, mime types, check names
+  OUTPUT_CONTRACT.json  required roles, mime types, size caps, check names
   .trace              trace_id and session_id, for log correlation
 ```
 

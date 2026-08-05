@@ -113,3 +113,20 @@ Second pass of input, after the first `plan/` draft. Triage of these against the
   validation works is an interface that will be upgraded later.
 - The core of the backend is modules. Each part of the workflow pipeline is its own atomic
   modular system, sharing only types and data.
+
+# Review round 3b: the demo is smaller than the MVP
+
+Input, not a decision. Triaged into `plan/15-demo-cut.md`.
+
+The MVP in `plan/13-mvp.md` is still too big for the demo. What the demo actually is:
+
+1. A user provides a query: user id, prompt, context.
+2. The server returns a job id, if it can handle a new job.
+3. The user polls job status until it says done, with related information such as whether
+   artifacts exist.
+4. The user queries artifacts.
+5. The user gets a video.
+
+Anything observational and any metric system, including user cost and budget attached to user
+information, is ignored for now. The user being able to call the API for all job statuses and
+for artifacts is enough.

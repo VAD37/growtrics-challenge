@@ -155,3 +155,34 @@ The plan says the backend pulls from the worker and writes to storage, which kee
 credential-free. Giving the worker a scoped upload token would be faster for large files and
 would put a credential inside an untrusted workspace. The current answer is no; it is worth
 recording as a question because the performance argument will come back.
+
+## Round 3 (API schema, see `plan/14-api-schema.md`)
+
+**Q-AC. Are artifacts reused across jobs, or only within one?**
+D010 content-addresses an artifact by `hash(query, concept, pipeline_version, ...)` so a repeat
+query serves the existing file. D055 derives `artifact_id = uuid5(NS_ART, job_id | content_hash)`,
+which includes the job and therefore cannot dedupe across jobs. They disagree, and it costs
+money: N1 and N3 both want the second learner asking Q2 to get the first learner's video instead
+of paying for another render. It is also a privacy question, because reuse means one learner's
+bytes are served to another, and a video rendered from personalised context is not safe to share.
+Closes when: someone decides whether reuse is keyed on the brief hash (safe, narrow) or on the
+concept (cheap, leaky). The `artifacts_by_hash` index exists either way; nothing in the MVP path
+depends on the answer.
+
+**Q-AD. Does the HTML deliverable ship, and is there an isolated origin to serve it from?**
+`html.lesson.v1` is designed in `plan/14-api-schema.md` and not built. The sanitiser is a day of
+work; the isolated origin is a deployment decision nobody has made. Without the origin, the
+profile can still ship with `disposition: attachment`, which downloads instead of renders and
+loses most of the point.
+Closes when: the reviewer says whether an interactive lesson is a product goal at all.
+
+**Q-AE. Can one job have two primaries?**
+A profile that produces both a video and an interactive page has no way to express itself today:
+`primary_artifact_id` is one field. The alternative is two jobs from one request, which breaks
+one-brief-one-job. Not a problem until a profile wants it.
+
+**Q-AF. Does the chat product need `parent_job_id`?**
+"Make it shorter" is the obvious next thing a learner types. Today that is a new brief and
+therefore a new job with no link back to what it revises. A `parent_job_id` would give the panel
+a thread and give cost control a way to see a regeneration loop, which is exactly what D057's
+per-context ceiling is defending against. Deliberately not added yet.

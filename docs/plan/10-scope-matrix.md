@@ -5,6 +5,10 @@ picks a column per row; the picks become decision lines in `../decisions.md`.
 
 Rows marked **2b** moved or appeared because of review round 2b. Reasoning in `11-triage.md`.
 
+The reviewer has since cut further than any row here. `15-demo-cut.md` is the picked scope
+(D085); this table stays as the full menu and as the record of what each row costs.
+Rows marked **3** appeared with the API schema draft. Reasoning in `14-api-schema.md`.
+
 Levels:
 
 - **BUILD** real code with tests.
@@ -62,6 +66,10 @@ Cost is rough implementation effort, not runtime cost.
 | 45 | Import-linter contract in CI | 03 | S | **BUILD** 2b | An architectural rule that is not checked is a comment |
 | 46 | `ResultValidator` port, versioned | 09 | S | **BUILD** 2b | The only contract that matters across the agent seam |
 | 47 | Database migrations | 03 | S | pick 2b | `create_all` runs the demo; it is not a migration strategy |
+| 48 | Profile registry and `OutputContract` as request-and-test | 14 | S | **BUILD** 3 | The worker's instruction and the acceptance test become one document that cannot drift |
+| 49 | Deliverable projection and `/v1/jobs/{id}/deliverable` | 04, 14 | S | pick 3 | The job document already carries the primary; this is the full set for a lesson panel |
+| 50 | `html.lesson.v1`: sanitiser, CSP, isolated origin | 14 | L | DEFER 3 | Agent-authored HTML is active content; the origin is a deployment decision, not code |
+| 51 | `ETag` / `If-None-Match` on the job document | 14 | S | pick 3 | Two lines, and polling is the entire observation model |
 
 Cost key: S under an hour, M a few hours, L most of a day or more.
 

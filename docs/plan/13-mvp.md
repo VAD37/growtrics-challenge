@@ -1,5 +1,9 @@
 # MVP
 
+**Superseded as the build order by `15-demo-cut.md` (D085).** This page stays as the superset:
+the frozen SQL schema, the frozen `/v1` surface, and the ten stages the demo cut is a subset of.
+Read this for what a table or an endpoint means, and `15-demo-cut.md` for what gets built.
+
 ## Definition of done
 
 A reviewer runs one command, then:
@@ -131,8 +135,9 @@ CREATE TABLE jobs (
     stage            text NOT NULL,
     attempt          int  NOT NULL DEFAULT 0,
     progress_percent int  NOT NULL DEFAULT 0,
-    output_contract  text NOT NULL DEFAULT 'v1',
-    artifact_id      text,
+    profile          text NOT NULL DEFAULT 'video.short.v1',   -- what to make
+    output_contract  text NOT NULL DEFAULT 'v1',               -- under which rules
+    artifact_id      text,                                     -- the PRIMARY artifact
     budget           jsonb NOT NULL DEFAULT '{}',
     failure          jsonb,                      -- {code, stage, message}
     version          int  NOT NULL DEFAULT 0,
@@ -220,8 +225,10 @@ CREATE TABLE artifacts (
     artifact_id      text PRIMARY KEY,
     job_id           text NOT NULL REFERENCES jobs,
     chat_context_id  text NOT NULL,              -- denormalised, see note
-    kind             text NOT NULL,              -- VIDEO POSTER TRANSCRIPT SOURCE LOG
+    role             text NOT NULL,              -- PRIMARY POSTER TRANSCRIPT CAPTIONS ASSET SOURCE LOG
+    audience         text NOT NULL DEFAULT 'LEARNER',  -- LEARNER | OPERATOR
     mime             text NOT NULL,
+    rel_path         text,                       -- position in a bundle tree; NULL when standalone
     size_bytes       bigint NOT NULL,
     content_hash     text NOT NULL,
     storage_uri      text NOT NULL,
@@ -232,10 +239,17 @@ CREATE TABLE artifacts (
     created_at       timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX artifacts_by_context ON artifacts (chat_context_id, created_at DESC)
-    WHERE scan_verdict = 'CLEAN';
+    WHERE scan_verdict = 'CLEAN' AND audience = 'LEARNER' AND role = 'PRIMARY';
 CREATE INDEX artifacts_by_job     ON artifacts (job_id);
 CREATE INDEX artifacts_by_hash    ON artifacts (content_hash);
 ```
+
+`role`, `audience`, and `rel_path` replace the original single `kind` column (D078, D079). The
+old enum folded three questions into one: what the file is for, what format it is, and who may
+see it. `mime` already answered the second. The third had nowhere to live before: a harvested
+agent log can pass every safety check, be `CLEAN`, and still be something no learner may fetch,
+and `scan_verdict` is not the field to say so. The listing index carries both predicates so the chat
+panel query cannot reach a row it should not show.
 
 `chat_context_id` is denormalised onto `artifacts` so the chat panel's listing is one index
 scan with no join, and so the partial index can exclude quarantined rows entirely. The cost is
@@ -257,11 +271,14 @@ MVP surface, in build order:
 | GET | `/v1/artifacts/{artifact_id}/content` | P0 |
 | GET | `/v1/jobs` | P1 |
 | GET | `/v1/jobs/{job_id}/events` | P1 |
+| GET | `/v1/jobs/{job_id}/deliverable` | P1 |
+| GET | `/v1/jobs/{job_id}/content` | P1 |
 | GET | `/v1/me` | P2 |
 | POST | `/v1/jobs/{job_id}/cancel` | P2 |
 | GET | `/internal/metrics` | P2 |
 
-Shapes are in `04-api-design.md` and do not change here. Three conventions the MVP freezes:
+Shapes are in `04-api-design.md`, and the Pydantic types are in `14-api-schema.md`. Three
+conventions the MVP freezes:
 
 ```jsonc
 // every list response
@@ -284,7 +301,8 @@ known good.
 
 - [ ] `domain/` types: ids, `VideoJob`, `LessonBrief`, `Artifact`, enums
 - [ ] `domain/errors.py`: `ErrorCode` + `ERROR_CATALOG`
-- [ ] Pydantic request and response schemas for the five P0 endpoints
+- [ ] Pydantic request and response schemas for the five P0 endpoints, per `14-api-schema.md`
+- [ ] `OutputContract` registry with `video.short.v1`, and its `OUTPUT_CONTRACT.json` rendering
 - [ ] The migration above, applied by `create_all` or Alembic (Q-AA)
 - [ ] Id derivation: `uuid5` helpers with fixed namespaces, unit tested
 

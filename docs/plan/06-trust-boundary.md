@@ -121,9 +121,11 @@ declared 4 MB file that keeps producing bytes gets cut off, not stored.
 presence of a non-empty audio track are read from the file itself, not from the manifest.
 `@TODO` ffprobe behind the `MediaProbe` port; a stub reads a sidecar for the demo.
 
-**Contract match.** The `OutputContract` we sent lists required paths, kinds, and checks. The
-harvested set must satisfy it exactly. A missing required artifact fails the job. An extra
-undeclared file is dropped.
+**Contract match.** The `OutputContract` we sent lists required roles, mime types, caps, and
+checks. The harvested set must satisfy it exactly. A missing required artifact fails the job with
+`DELIVERABLE_INCOMPLETE`. An extra undeclared file is dropped. The contract that validates is the
+same object that was rendered into the worker's workspace, so there is no second definition of
+"done" to keep in step (D077).
 
 **Independent verification.** The worker's own check results are recorded as a claim and
 never used as evidence. The same checks run again on our side, on the bytes we received. A

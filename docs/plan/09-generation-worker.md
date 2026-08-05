@@ -91,7 +91,7 @@ workspace/
   BRIEF.md              topic, fenced as data
   CONTEXT.md            learner context, one labelled section per item kind
   CONSTRAINTS.md        duration, language, reading level, style
-  OUTPUT_CONTRACT.json  required paths, kinds, mime types, named checks
+  OUTPUT_CONTRACT.json  required roles, mime types, size caps, named checks
   .trace                trace_id, session_id
 ```
 
@@ -112,7 +112,7 @@ out/
   "session_id": "rs_01JB2K...",
   "status": "QUALIFIED",
   "artifacts": [
-    {"path": "out/video.mp4", "kind": "VIDEO", "mime": "video/mp4",
+    {"path": "out/video.mp4", "role": "PRIMARY", "mime": "video/mp4",
      "sha256": "...", "size_bytes": 4821330, "duration_s": 74.2}
   ],
   "checks": [

@@ -12,7 +12,8 @@ polling with an event cursor covers observation (N7) without adding a second pro
 | GET | `/v1/jobs/{job_id}` | Status, stage, progress, usage, error | `200` |
 | GET | `/v1/jobs/{job_id}/events` | Ordered event feed from a cursor | `200` |
 | POST | `/v1/jobs/{job_id}/cancel` | Best effort stop | `202` |
-| GET | `/v1/jobs/{job_id}/artifact` | Artifact metadata and link | `200`, `409` if not ready |
+| GET | `/v1/jobs/{job_id}/deliverable` | The full artifact set with its primary | `200`, `409` if not ready |
+| GET | `/v1/jobs/{job_id}/content` | Redirect to the primary artifact's bytes | `302`, `409` if not ready |
 | GET | `/v1/contexts/{chat_context_id}/artifacts` | Artifact history for one conversation | `200` |
 | GET | `/v1/artifacts/{artifact_id}/content` | The bytes | `200` or `302` |
 | GET | `/v1/me` | Principal, entitlement, balance. Stub | `200` |
@@ -38,9 +39,9 @@ Content-Type: application/json
     {"kind": "MISCONCEPTION", "text": "thinks electrons are transferred in every bond"}
   ],
   "options": {
+    "profile": "video.short.v1",
     "max_duration_s": 90,
-    "language": "en",
-    "output_contract": "v1"
+    "language": "en"
   }
 }
 ```
@@ -55,8 +56,15 @@ Field rules, all enforced at the edge:
 - `instruction`: 1 to 500 characters after normalisation. Required.
 - `context`: at most 8 items, each at most 500 characters, `kind` from the closed enum in
   `01-domain-model.md`. Optional.
-- `options.max_duration_s`: 15 to 180, clamped, not an error if out of range.
+- `options.profile`: a server-owned `ProfileId`, default `video.short.v1`. Unknown or disabled
+  is `422 OUTPUT_PROFILE_NOT_SUPPORTED`. A client selects a profile; it never authors an output
+  contract.
+- `options.max_duration_s`: 15 to 180, and rejected with `400` when outside it. Clamping was the
+  earlier rule and is withdrawn: a silently altered request is a silent partial success (N5).
+  The effective value, after the profile's own cap, is echoed on the job document.
 - Total request body capped at 16 KiB. Larger is `413`, not a truncation.
+
+Full Pydantic types for every model on this page are in `14-api-schema.md`.
 
 Context arrives as typed items rather than one prose blob. That is deliberate: it keeps the
 brief renderer from having to guess where one piece of user text ends and another begins, and
@@ -72,18 +80,22 @@ it makes each item individually attributable in the audit trail.
   "stage": "INTAKE",
   "attempt": 0,
   "progress": {"percent": 5, "step": "intake", "message": "checking your request"},
-  "output_contract": "v1",
+  "profile": "video.short.v1",
+  "contract_version": "1",
+  "constraints": {"max_duration_s": 90, "language": "en", "reading_level": null},
   "cost": {
     "ceiling_micros": 45000,
     "spent_micros": 0,
     "measured_micros": 0,
     "claimed_micros": 0
   },
+  "artifact": null,
   "created_at": "2026-08-05T09:12:03Z",
   "links": {
     "self": "/v1/jobs/job_01JB2K...",
     "events": "/v1/jobs/job_01JB2K.../events",
-    "artifact": null
+    "deliverable": null,
+    "content": null
   }
 }
 ```
@@ -163,30 +175,55 @@ part that makes a two-minute wait tolerable.
 `@TODO` server-sent events over the same feed is a small addition once the cursor exists. Not
 this round.
 
-## Artifact
+## Deliverable
+
+A job produces one **deliverable**: a role-keyed set of artifacts with one designated primary.
+The job document carries the primary alone, because "what do I play" is the common question;
+the set is one link away for a client that renders a full lesson panel. Rationale, and what
+happens when the primary is not a video, in `14-api-schema.md`.
 
 ```http
-GET /v1/jobs/{job_id}/artifact
+GET /v1/jobs/{job_id}/deliverable
 ```
 
 ```json
 {
-  "artifact_id": "art_01JB2M...",
-  "kind": "VIDEO",
-  "mime": "video/mp4",
-  "size_bytes": 4821330,
-  "duration_s": 74.2,
-  "content_hash": "sha256:9f2b...",
-  "content_url": "/v1/artifacts/art_01JB2M.../content",
-  "sidecars": [
-    {"kind": "TRANSCRIPT", "content_url": "/v1/artifacts/art_01JB2N.../content"},
-    {"kind": "POSTER", "content_url": "/v1/artifacts/art_01JB2P.../content"}
-  ]
+  "job_id": "job_01JB2K...",
+  "profile": "video.short.v1",
+  "contract_version": "1",
+  "status": "READY",
+  "primary_artifact_id": "art_01JB2M...",
+  "artifacts": [
+    {"artifact_id": "art_01JB2M...", "role": "PRIMARY", "media_type": "video/mp4",
+     "size_bytes": 4821330, "content_hash": "sha256:9f2b...", "rel_path": null,
+     "media": {"duration_s": 74.2, "width": 1280, "height": 720, "has_audio": true},
+     "content_url": "/v1/artifacts/art_01JB2M.../content"},
+    {"artifact_id": "art_01JB2N...", "role": "TRANSCRIPT", "media_type": "text/plain",
+     "size_bytes": 3120, "content_hash": "sha256:41ca...", "rel_path": null, "media": null,
+     "content_url": "/v1/artifacts/art_01JB2N.../content"},
+    {"artifact_id": "art_01JB2P...", "role": "POSTER", "media_type": "image/png",
+     "size_bytes": 91204, "content_hash": "sha256:7d10...", "rel_path": null, "media": null,
+     "content_url": "/v1/artifacts/art_01JB2P.../content"}
+  ],
+  "total_size_bytes": 4915654,
+  "verification": {
+    "validator_version": "rv-1",
+    "verdict": "CLEAN",
+    "worker_claim_agreed": true,
+    "checks": [{"name": "audio_not_silent", "passed": true}]
+  },
+  "completed_at": "2026-08-05T09:14:31Z"
 }
 ```
 
+Only `audience = LEARNER` artifacts appear here. A harvested agent log is a row and an operator
+can read it; there is no value of any query parameter that puts it in this list.
+
 `409 ARTIFACT_NOT_READY` with the current status if the job has not succeeded. Never a `404`,
 which would suggest the job does not exist.
+
+`GET /v1/jobs/{job_id}/content` is the one-request form: `302` to the primary's bytes, so a
+walkthrough is `curl -L .../content -o lesson.mp4` rather than two calls and a `jq`.
 
 ### Artifact history for a conversation
 
@@ -197,6 +234,10 @@ GET /v1/contexts/{chat_context_id}/artifacts?limit=20&cursor=...
 Returns the artifacts produced for that conversation, newest first, each with its job id,
 status, and content link. This is what the chat panel renders, and what a redirect from a chat
 message resolves against.
+
+Defaults to `role=PRIMARY`, so one lesson is one row. Without that default the panel shows a
+transcript and a poster as if they were two more lessons. `?role=` widens it; no value of it
+reaches an `audience = OPERATOR` row.
 
 The context id is checked against the principal before the query runs. An id that exists but
 belongs to someone else returns the same `404` as an id that does not exist.
@@ -226,6 +267,7 @@ own the mapping. One place to audit for leaks, one place to translate later.
 | `INVALID_REQUEST` | 400 | Shape, size, or enum violation |
 | `REQUEST_REJECTED` | 422 | Intake guard refused. `details.reason` is a coarse category |
 | `SUBJECT_NOT_SUPPORTED` | 422 | Not a learning request we cover |
+| `OUTPUT_PROFILE_NOT_SUPPORTED` | 422 | Profile unknown, disabled, or not offered for this concept |
 | `IDEMPOTENCY_KEY_REUSED` | 409 | Same key, different body |
 | `INSUFFICIENT_BALANCE` | 402 | Stub account has no room |
 | `BUDGET_EXHAUSTED` | 402 | A ceiling was hit mid-run: job, chat context, or daily principal |
@@ -233,6 +275,7 @@ own the mapping. One place to audit for leaks, one place to translate later.
 | `JOB_NOT_FOUND` | 404 | Unknown id, or not the caller's job |
 | `ARTIFACT_NOT_READY` | 409 | Job not in a terminal success state |
 | `ARTIFACT_QUARANTINED` | 409 | Produced, failed verification, not servable |
+| `DELIVERABLE_INCOMPLETE` | 409 | A required part is missing after verification; the job is FAILED and the evidence is kept |
 | `GENERATION_UNAVAILABLE` | 503 | No worker could be placed |
 | `GENERATION_TIMEOUT` | 504 | Worker exceeded its wall clock |
 | `INTERNAL_ERROR` | 500 | Everything else, with a trace id in details |

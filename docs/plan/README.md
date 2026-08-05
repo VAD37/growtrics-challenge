@@ -9,8 +9,9 @@ Nothing here is built yet. The point of this directory is to make the boundaries
 data crossing them concrete enough to review, then cut. `10-scope-matrix.md` is the cut
 list; read it last but treat it as the deliverable.
 
-In a hurry: `12-data-control.md` for the shape of the system in one diagram, then
-`13-mvp.md` for what gets built and in what order.
+In a hurry: `15-demo-cut.md` is what actually gets built. `12-data-control.md` is the shape of
+the system in one diagram, `13-mvp.md` holds the frozen schema and contract that the demo cut
+is a subset of, and `14-api-schema.md` has the types a client touches.
 
 ## Reading order
 
@@ -29,6 +30,8 @@ In a hurry: `12-data-control.md` for the shape of the system in one diagram, the
 | `11-triage.md` | Review round 2b against the plan: what it confirmed, what it changed |
 | `12-data-control.md` | Who owns which data, who may see it, and the stripped-down API-to-output picture |
 | `13-mvp.md` | The frozen SQL schema and API contract, and the staged build checklist |
+| `14-api-schema.md` | The edge types themselves: request schema, job document, and what a deliverable is |
+| `15-demo-cut.md` | The subset that gets built: six endpoints, six tables, four stages |
 
 ## Conventions used in these docs
 
