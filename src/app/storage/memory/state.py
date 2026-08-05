@@ -97,8 +97,10 @@ class WorkItemRow:
         """Unclaimed and due.
 
         An expired lease is deliberately NOT claimable. Handing an abandoned row back is
-        `WorkQueue.reclaim`'s job and that is a stub, so a claim here would quietly implement
-        half of the reclaim path and hide the fact that nothing else does.
+        `WorkQueue.reclaim`'s, and the sweep is the only thing allowed to decide a holder is
+        gone: a claim that took a lapsed row itself would hand it out without counting the worker
+        it burned, and `max_claims` would then never stop a poison item. This mirrors the
+        `work_items_claimable` index, which is `WHERE claimed_by IS NULL` and nothing else.
         """
         return self.claimed_by is None and self.available_at <= now
 
