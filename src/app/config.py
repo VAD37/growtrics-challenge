@@ -117,5 +117,25 @@ class Settings(BaseSettings):
     `app/domain/access.py`.
     """
 
+    # --- object store ---------------------------------------------------------------
+    object_store_public_endpoint: str = "http://localhost:9000"
+    """The endpoint a presigned url is signed against, which is not the one we connect on.
+
+    Inside compose the store answers to `storage:9000`, a name that resolves on the compose
+    network and nowhere else. A browser on the host cannot resolve it, and a SigV4 signature
+    covers the host, so a url signed against the internal name cannot be rewritten into a
+    working one afterwards. `app/storage/objects/s3.py` therefore signs with a second client
+    pointed here while reading and writing over `object_store_endpoint`.
+    """
+
+    object_store_presign_ttl_seconds: int = 300
+    """How long a presigned download url stays valid.
+
+    @audit this is the only control on one. A presigned url is a bearer token: whoever holds the
+    string reads the bytes, with no principal check and no revocation short of rotating the
+    store's credentials. Five minutes is long enough for a browser to start a download and short
+    enough that a url copied out of a log is stale before anybody reads it.
+    """
+
 
 settings = Settings()
