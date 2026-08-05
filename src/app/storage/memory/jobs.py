@@ -18,6 +18,7 @@ the brief id the intake stage already recorded.
 """
 
 from dataclasses import replace
+from datetime import datetime
 from enum import StrEnum
 from typing import Final
 
@@ -112,6 +113,34 @@ class MemoryJobRepository:
     async def load_for_run(self, job_id: JobId) -> JobRecord | None:
         """No scope: the worker reading its own row, on a path no request reaches."""
         return self._database.jobs.get(job_id)
+
+    async def list_untouched_since(
+        self, status: JobStatus, moment: datetime, *, limit: int
+    ) -> tuple[JobRecord, ...]:
+        """Jobs still in `status` whose row has not been written since `moment`, oldest first.
+
+        The predicate is `updated_at`, never `created_at`. A job submitted last week that moved a
+        stage a second ago has not stopped, and a sweep that read the submit time would fail it
+        for being old. `updated_at` is what `apply_transition` stamps, so "untouched" here means
+        exactly "nothing has moved this row", which is the question the sweep is asking.
+
+        Inclusive at `moment`, matching `policy.lease_expired`: at the edge the wait is over.
+
+        Capped and oldest first because the backlog this exists for is tens of thousands deep. A
+        tick that drains the worst of it beats one that reads all of it and then times out.
+
+        No scope, for `load_for_run`'s reason: this is the system reading its own backlog, and a
+        scope here would imply a caller who could ask for somebody else's.
+        """
+        waiting = sorted(
+            (
+                job
+                for job in self._database.jobs.values()
+                if job.status is status and job.updated_at <= moment
+            ),
+            key=lambda job: (job.updated_at, job.job_id),
+        )
+        return tuple(waiting[:limit])
 
     async def apply_transition(self, transition: JobTransition) -> JobRecord:
         """The only write to `jobs` (D066). Returns the row as it now stands.

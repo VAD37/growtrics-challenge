@@ -1,13 +1,16 @@
-"""The `jobs` table double: transitions, the admission count, and keyset paging.
+"""The `jobs` table double: transitions, the admission count, keyset paging, and the sweep's read.
 
-Three properties carry the weight here. A transition matches on the version or it is refused, so
+Four properties carry the weight here. A transition matches on the version or it is refused, so
 a lost update is a failed test rather than a status nobody can explain. `None` on a nullable
 column means "leave it alone" and never "clear it", which is the easiest bug in the file to
-write and the hardest to see afterwards. And a page is positioned by key, so a row inserted while
-a client is paging cannot make it skip or repeat one.
+write and the hardest to see afterwards. A page is positioned by key, so a row inserted while
+a client is paging cannot make it skip or repeat one. And `list_untouched_since` reads
+`updated_at`, so the sweep gives up on jobs that have stopped moving rather than on jobs that
+are merely old.
 """
 
-from datetime import timedelta
+from dataclasses import replace
+from datetime import datetime, timedelta
 
 import pytest
 from memory_rows_test import (
@@ -73,6 +76,25 @@ def transition_to(
         artifact_id=artifact_id,
         failure=failure,
     )
+
+
+def seed_job(
+    database: MemoryDatabase,
+    index: int,
+    *,
+    updated_at: datetime,
+    status: JobStatus = JobStatus.QUEUED,
+    created_at: datetime = T0,
+) -> JobRecord:
+    """A row whose last write is `updated_at`, set apart from `created_at` on purpose.
+
+    `make_job` ties the two together, which is the one shape the sweep's read must not be tested
+    against: a job that was submitted last week and moved a stage a second ago has to look
+    different from one that has sat still since it arrived.
+    """
+    job = replace(make_job(index, status=status, created_at=created_at), updated_at=updated_at)
+    database.jobs[job.job_id] = job
+    return job
 
 
 def a_failure() -> FailureRecord:
@@ -182,6 +204,67 @@ async def test_load_for_run_reads_the_row_without_a_scope(
 
     assert await jobs.load_for_run(job.job_id) == job
     assert await jobs.load_for_run(job_id_for(9)) is None
+
+
+async def test_untouched_since_is_inclusive_at_the_moment_it_was_given(
+    database: MemoryDatabase, jobs: MemoryJobRepository
+) -> None:
+    """At the edge the wait is over, which is `policy.lease_expired`'s convention."""
+    on_the_edge = seed_job(database, 0, updated_at=T0)
+    seed_job(database, 1, updated_at=T0 + timedelta(microseconds=1))
+
+    waiting = await jobs.list_untouched_since(JobStatus.QUEUED, T0, limit=10)
+
+    assert [job.job_id for job in waiting] == [on_the_edge.job_id]
+
+
+async def test_untouched_since_reads_the_last_write_and_not_the_submit(
+    database: MemoryDatabase, jobs: MemoryJobRepository
+) -> None:
+    """A job that moved a second ago is not untouched, however long ago it was submitted."""
+    old_but_moving = seed_job(
+        database,
+        0,
+        created_at=T0 - timedelta(days=7),
+        updated_at=T0 + timedelta(minutes=5),
+    )
+    young_and_stuck = seed_job(
+        database,
+        1,
+        created_at=T0 + timedelta(minutes=1),
+        updated_at=T0 + timedelta(minutes=1),
+    )
+
+    waiting = await jobs.list_untouched_since(JobStatus.QUEUED, T0 + timedelta(minutes=2), limit=10)
+
+    assert [job.job_id for job in waiting] == [young_and_stuck.job_id]
+    # Without this the test passes on a `created_at` filter too, and proves nothing.
+    assert old_but_moving.created_at < young_and_stuck.created_at
+
+
+async def test_untouched_since_is_oldest_first_and_the_cap_keeps_the_oldest(
+    database: MemoryDatabase, jobs: MemoryJobRepository
+) -> None:
+    """The backlog is deeper than one tick. Draining its worst end beats reading all of it."""
+    for index in range(4):
+        seed_job(database, index, updated_at=T0 - timedelta(minutes=index))
+
+    waiting = await jobs.list_untouched_since(JobStatus.QUEUED, T0, limit=2)
+
+    assert [job.job_id for job in waiting] == [job_id_for(3), job_id_for(2)]
+
+
+async def test_untouched_since_never_crosses_into_another_status(
+    database: MemoryDatabase, jobs: MemoryJobRepository
+) -> None:
+    """Waiting too long to start and hanging mid-run are two timeouts, not one (`sweeper.py`)."""
+    queued = seed_job(database, 0, status=JobStatus.QUEUED, updated_at=T0 - timedelta(hours=1))
+    seed_job(database, 1, status=JobStatus.RUNNING, updated_at=T0 - timedelta(hours=1))
+    seed_job(database, 2, status=JobStatus.SUCCEEDED, updated_at=T0 - timedelta(hours=1))
+
+    waiting = await jobs.list_untouched_since(JobStatus.QUEUED, T0, limit=10)
+
+    assert [job.job_id for job in waiting] == [queued.job_id]
 
 
 async def test_listing_is_newest_first_and_pages_by_keyset(

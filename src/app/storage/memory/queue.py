@@ -1,4 +1,4 @@
-"""`work_items` in memory: claim, heartbeat, release, complete.
+"""`work_items` in memory: claim, heartbeat, release, complete, and the three the sweep reads.
 
 The SQL adapter claims with `FOR UPDATE SKIP LOCKED`; this one sorts. Both have to hand out the
 oldest available row, and a dictionary that happens to preserve insertion order is not a queue --
@@ -13,13 +13,23 @@ The lease discipline mirrors `app/worker.py` exactly:
 * `release` hands a claim back and makes the row immediately claimable. Only a clean stop between
   claiming and starting calls it; a crash must not, because an abandoned lease has to expire.
 * `complete` deletes the row. The demo never retries (`docs/demo.md`, D2).
-* `reclaim` is deferred, and the docstring says what that costs.
+
+What a crash leaves behind is `engine/sweeper.py`'s, and it splits three ways here. `reclaim`
+hands a lapsed row back so the next worker can have it, `exhausted` names the lapsed rows it will
+not hand back because they have burned every worker they are going to get, and `discard` removes
+a row whoever holds it. The boundary between the first two is `max_claims` and nothing else, so
+no row is both, and every lapsed row is one or the other.
+
+`lease_expired` is imported rather than restated. "Inclusive at the deadline" is a decision, and a
+second copy of `<=` here would be a decision nobody knows they are making the day it changes.
 """
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 from app.domain.ids import WorkItemId
 from app.domain.records import ClaimedWorkItem
+from app.orchestration.engine.policy import lease_expired
 from app.orchestration.ports import Clock
 from app.storage.memory.state import MemoryDatabase, WorkItemRow
 
@@ -90,18 +100,61 @@ class MemoryWorkQueue:
         del self._database.work_items[item_id]
 
     async def reclaim(self, now: datetime, max_claims: int) -> int:
-        """@TODO DEFERRED, scope override item 8. Nothing calls this.
+        """Hand every lapsed claim back. Returns the rows made claimable again.
 
-        It would clear `claimed_by` and `claimed_until` on every row whose `claimed_until` is
-        before `now`, increment `claim_count`, and drop the rows past `max_claims`. Everything it
-        needs is already on `WorkItemRow`, which is why the deferral costs no schema change.
+        `claim_count` goes up here and only here, so it counts the workers a row has burned
+        rather than the times it has been run. A row already at `max_claims` is left exactly as
+        it stands: handing a poison item back a fourth time is how one item eats a queue, and
+        `exhausted` is where that row goes instead.
 
-        **Until it exists, an abandoned item stays claimed forever and its job sits at
-        `RUNNING`.** `claim` deliberately refuses to pick up an expired lease, so nothing else in
-        this class quietly implements half of this and hides the gap. See
-        `app/orchestration/engine/sweeper.py`.
+        The claim is cleared through `released()`, so "handed back" is one shape wherever it
+        happens, and `available_at` is left alone -- a row whose turn had come keeps its place in
+        the queue instead of going to the back of it because a worker died holding it.
         """
-        raise NotImplementedError("queue reclaim is deferred; see the docstring")
+        handed_back = 0
+        for item_id, row in list(self._database.work_items.items()):
+            if not self._lapsed(row, now) or row.claim_count >= max_claims:
+                continue
+            self._database.work_items[item_id] = replace(
+                row.released(), claim_count=row.claim_count + 1
+            )
+            handed_back += 1
+        return handed_back
+
+    async def exhausted(self, now: datetime, max_claims: int) -> tuple[ClaimedWorkItem, ...]:
+        """The lapsed rows `reclaim` will not touch, oldest first.
+
+        `now` is what keeps this off a row a live worker is still holding. A row on its last
+        claim whose lease has not lapsed is on its final attempt, not past it, and failing the
+        job under a worker that is still running it would be the sweep racing the runner.
+
+        Ordered like `claim` so two ticks over the same backlog give up in the same order.
+        """
+        lapsed = [
+            row
+            for row in self._database.work_items.values()
+            if self._lapsed(row, now) and row.claim_count >= max_claims
+        ]
+        lapsed.sort(key=lambda row: (row.available_at, row.item_id))
+        return tuple(row.as_claimed() for row in lapsed)
+
+    async def discard(self, item_id: WorkItemId) -> bool:
+        """Delete a row whoever holds it. `True` when a row went.
+
+        No owner to match, unlike `complete`: a swept row is either unclaimed or held by a
+        process that is not coming back, and there is nobody left to ask. A `FAILED` job whose
+        queue row outlived it is a row the next worker claims and the runner then drops, forever.
+        """
+        return self._database.work_items.pop(item_id, None) is not None
+
+    @staticmethod
+    def _lapsed(row: WorkItemRow, now: datetime) -> bool:
+        """Held, and past its deadline. An unclaimed row has no lease to lapse."""
+        return (
+            row.claimed_by is not None
+            and row.claimed_until is not None
+            and lease_expired(row.claimed_until, now)
+        )
 
     def rows(self) -> tuple[WorkItemRow, ...]:
         """Every row with its claim state, oldest first. For assertions, not for the ports."""
