@@ -38,6 +38,7 @@ __all__ = [
     "ObjectKey",
     "ObjectStat",
     "ObjectStore",
+    "PresigningObjectStore",
     "StorageUri",
     "UnknownStorageUriError",
     "UnsafeObjectKeyError",
@@ -158,4 +159,33 @@ class ObjectStore(Protocol):
 
     async def stat(self, storage_uri: str) -> ObjectStat | None:
         """Size without reading. `None` when the object is absent."""
+        ...
+
+
+@runtime_checkable
+class PresigningObjectStore(Protocol):
+    """A store that can hand a client a url and stop carrying the bytes itself.
+
+    A second protocol rather than a fourth method on `ObjectStore`, because a directory is not
+    reachable over HTTP and `FilesystemObjectStore` therefore cannot honestly implement this.
+    Adding it there would mean a method that only raises, and a method that only raises makes
+    `isinstance` answer yes to a store that cannot do the thing.
+
+    So the capability is asked about instead of assumed:
+
+        if isinstance(store, PresigningObjectStore):
+            return redirect(await store.presigned_url(uri))
+        return stream(store.open(uri))
+
+    @audit whatever this returns is a bearer token: it carries its own authorisation, so anybody
+    who obtains the string reads the bytes until it expires. An implementation owes the caller a
+    short `ttl_seconds` and owes itself the discipline of never logging one.
+    """
+
+    async def presigned_url(self, storage_uri: str, *, ttl_seconds: int | None = None) -> str:
+        """A url for reading this object, valid for `ttl_seconds`.
+
+        `None` means the backend's configured default, which is where an operator sets the
+        expiry once rather than at every call site.
+        """
         ...
