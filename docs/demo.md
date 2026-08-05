@@ -1,6 +1,9 @@
-# Demo cut
+# Demo, draft 1
 
-`13-mvp.md` still describes ten stages, eleven tables, and twelve endpoints. This doc is the
+**Approved. This is what gets built** (D085, D100). Design lives in `plan/`; this page is the
+scope, and it wins over any wider version of the same thing.
+
+`plan/13-mvp.md` still describes ten stages, eleven tables, and twelve endpoints. This doc is the
 smaller thing that actually gets built, taken directly from the reviewer's success test:
 
 1. A user sends a query: their id, an instruction, some context.
@@ -13,11 +16,12 @@ Plus one thing outside those five: the user can list all of their jobs and all o
 artifacts.
 
 Nothing else is in. Cost metering, budgets, the event feed, metrics, and the operator views are
-out of the demo entirely, not stubbed. They were designed in `05`, `08`, and `13`, and every one
-of them comes back as an additive change.
+out of the demo entirely, not stubbed. They were designed in `plan/05`, `plan/08`, and
+`plan/13`, and every one of them comes back as an additive change.
 
-`13-mvp.md` stays as written. It is the superset the demo is a subset of, and the frozen schema
-and contract still live there. This doc records what is cut and what each cut costs to restore.
+`plan/13-mvp.md` stays as written. It is the superset the demo is a subset of, and the frozen
+schema and contract still live there. This doc records what is cut and what each cut costs to
+restore.
 
 ## Surface
 
@@ -64,7 +68,7 @@ after cost metering was cut.
 
 ### Request
 
-`CreateJobRequest` from `14-api-schema.md`, minus one field:
+`CreateJobRequest` from `plan/14-api-schema.md`, minus one field:
 
 ```python
 class CreateJobRequest(BaseModel):
@@ -82,7 +86,7 @@ otherwise meant a fake context id in every curl.
 
 ### Job document
 
-`JobView` from `14-api-schema.md`, minus `cost`, with `links.events` and `links.deliverable`
+`JobView` from `plan/14-api-schema.md`, minus `cost`, with `links.events` and `links.deliverable`
 gone (D091). Both return additively when their stages are built.
 
 ```jsonc
@@ -128,7 +132,7 @@ A job that fails puts `GENERATION_FAILED` in `failure.code` and still answers `2
 
 ## Tables
 
-Six of the eleven, with their frozen DDL from `13-mvp.md` and two amendments below.
+Six of the eleven, with their frozen DDL from `plan/13-mvp.md` and two amendments below.
 
 | Table | Why it is in |
 |-------|--------------|
@@ -267,7 +271,7 @@ change to a table the demo writes.
 The demo shows a job system with idempotent submit, scoped reads, an asynchronous worker, and
 verified output. It does not show the parts of this design that are actually interesting:
 surviving a crashed run, resisting a malicious prompt, and keeping an agent's output contained.
-Those are stages 5 to 8 of `13-mvp.md`, and they stay written down rather than built.
+Those are stages 5 to 8 of `plan/13-mvp.md`, and they stay written down rather than built.
 
 The trade is deliberate. A reviewer cannot see failure survival on a system that does not run
 yet, and every one of those stages attaches to the same six tables.

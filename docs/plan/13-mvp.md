@@ -1,8 +1,8 @@
 # MVP
 
-**Superseded as the build order by `15-demo-cut.md` (D085).** This page stays as the superset:
+**Superseded as the build order by `../demo.md` (D085).** This page stays as the superset:
 the frozen SQL schema, the frozen `/v1` surface, and the ten stages the demo cut is a subset of.
-Read this for what a table or an endpoint means, and `15-demo-cut.md` for what gets built.
+Read this for what a table or an endpoint means, and `../demo.md` for what gets built.
 
 ## Definition of done
 

@@ -9,7 +9,7 @@ make down    # stop them
 
 Then `curl localhost:8000/health`. MinIO console is on `localhost:9001`.
 
-Only the spine exists: packages, entrypoints, and infrastructure. Build order is
-`docs/plan/15-demo-cut.md`.
+Only the spine exists: packages, entrypoints, and infrastructure. Scope and build order are
+[`docs/demo.md`](docs/demo.md).
 
 Design docs live in [`docs/`](docs/). Start at [`docs/plan/README.md`](docs/plan/README.md).

@@ -5,7 +5,7 @@ picks a column per row; the picks become decision lines in `../decisions.md`.
 
 Rows marked **2b** moved or appeared because of review round 2b. Reasoning in `11-triage.md`.
 
-The reviewer has since cut further than any row here. `15-demo-cut.md` is the picked scope
+The reviewer has since cut further than any row here. `../demo.md` is the picked scope
 (D085); this table stays as the full menu and as the record of what each row costs.
 Rows marked **3** appeared with the API schema draft. Reasoning in `14-api-schema.md`.
 

@@ -9,14 +9,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Reference
 
 Read before changing anything. Docs are the source of truth. Only the spine exists in code:
-packages, two entrypoints, `/health`, and compose. Build order is `docs/plan/15-demo-cut.md`.
+packages, two entrypoints, `/health`, and compose. Build order is `docs/demo.md`.
 
 | Doc | Contents |
 |-----|----------|
+| `docs/demo.md` | **Approved scope and build order.** Six endpoints, six tables, four stages (D085, D100) |
 | `docs/decisions.md` | Append-only decision log, one line each. Current state of every choice |
 | `docs/open-questions.md` | Deferred choices and what closes each |
 | `docs/notes.md` | Input context from review rounds, captured verbatim. Input, not decision |
-| `docs/plan/` | Current design. Start at `plan/README.md`. `plan/15-demo-cut.md` is the build order; `plan/13-mvp.md` holds the frozen SQL schema and `/v1` contract it subsets; `plan/12-data-control.md` is the system in one diagram; `plan/14-api-schema.md` holds the edge types and what a deliverable is |
+| `docs/plan/` | Design, not scope. Start at `plan/README.md`. `plan/13-mvp.md` holds the frozen SQL schema and `/v1` contract that `docs/demo.md` subsets; `plan/12-data-control.md` is the system in one diagram; `plan/14-api-schema.md` holds the edge types and what a deliverable is |
 | `docs/challenges/00-requirements.md` | Brief extracted from the PDF, with stable ids (R/Q/N/D) |
 | `docs/challenges/01-05` | Round-1 design. Superseded on the generation path by `plan/`, see D023 |
 
@@ -32,10 +33,10 @@ Source brief: `Agentic_Backend_Challenge_AI_Chemistry_Video_Request_Service.pdf`
   candidates to `docs/open-questions.md`; do not pick one silently.
 - Deferred work is `@TODO` in code. Unproven security assumptions are `@audit`. Neither is
   dropped silently.
-- Build only what `docs/plan/15-demo-cut.md` lists (D085). `docs/plan/10-scope-matrix.md` holds
-  the wider cut list; do not build a row the reviewer has not picked.
+- Build only what `docs/demo.md` lists, in its stage order (D085, D100).
+  `docs/plan/10-scope-matrix.md` holds the wider menu; do not build a row nobody has picked.
 - The SQL schema and the `/v1` contract in `docs/plan/13-mvp.md` are frozen (D071). Amendments
-  live in `plan/14-api-schema.md` (A1 to A4) and `plan/15-demo-cut.md` (A5, A6), each with a
+  live in `plan/14-api-schema.md` (A1 to A4) and `docs/demo.md` (A5, A6), each with a
   decision line. Everything else can be rewritten behind a port.
 
 ## Project settings
@@ -91,8 +92,9 @@ docstring and nothing else so far; `domain/` imports nothing, `api/` imports no 
 │   └── storage/          sql/ + objects/ adapters; memory/ test doubles
 ├── tests/{unit,contract,redteam,integration}/
 ├── docs/
+│   ├── demo.md           approved scope and build order
 │   ├── challenges/       round-1 docs + extracted requirements
-│   ├── plan/             round-2 design (see Reference)
+│   ├── plan/             design, superset of the demo
 │   ├── decisions.md      append-only
 │   ├── open-questions.md
 │   └── notes.md          captured input context

@@ -116,7 +116,7 @@ Second pass of input, after the first `plan/` draft. Triage of these against the
 
 # Review round 3b: the demo is smaller than the MVP
 
-Input, not a decision. Triaged into `plan/15-demo-cut.md`.
+Input, not a decision. Triaged into `demo.md`.
 
 The MVP in `plan/13-mvp.md` is still too big for the demo. What the demo actually is:
 
