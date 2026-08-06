@@ -5,15 +5,16 @@ doubles are not independent: `UnitOfWork` writes the row `JobRepository` reads a
 `WorkQueue` claims. Five separate dictionaries behind five separate classes would pass their own
 unit tests and fail the moment a job had to move.
 
-The tables are the six of `docs/demo.md` minus `briefs` and `idempotency_keys`: briefs are
-`intake`'s to write and there is no idempotency key in the demo (scope override item 2). Bytes
-are not here at all -- `MemoryObjectStore` holds those, in a different object, because a store
-that kept files beside rows would make D052 look like a formality.
+The tables are the six of `docs/demo.md` minus `idempotency_keys`, of which the demo has none
+(scope override item 2). `briefs` is here and is written by nothing in this package: intake is
+its sole writer (D066), and the double for it is `MemoryBriefRepository`, which is the storage
+half intake calls through. Bytes are not here at all -- `MemoryObjectStore` holds those, in a
+different object, because a store that kept files beside rows would make D052 look like a
+formality.
 
-The three errors are the three ways a real database says no. They are named rather than folded
-into one so a test asserts on the failure it meant: a duplicate primary key is a caller inserting
-twice, a version conflict is a lost update, and a missing row is a caller acting on something
-that was deleted underneath it.
+The three ways a real database says no are `app/storage/errors.py`, imported rather than
+declared here. The doubles and the SQL adapters raise the same three classes, so the contract
+suite names the failure it expects once instead of asking which backend it is talking to.
 """
 
 from collections.abc import Callable, Iterable
@@ -21,9 +22,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from app.domain.access import Principal
-from app.domain.ids import ArtifactId, JobId, PrincipalId, RequestKey, WorkItemId
+from app.domain.ids import ArtifactId, BriefId, JobId, PrincipalId, RequestKey, WorkItemId
 from app.domain.records import (
     ArtifactRecord,
+    BriefRecord,
     ClaimedWorkItem,
     Cursor,
     JobRecord,
@@ -31,39 +33,24 @@ from app.domain.records import (
     StoredRequest,
 )
 from app.orchestration.ports import QueuedWorkItem
+from app.storage.errors import (
+    IntegrityError,
+    RowNotFoundError,
+    StorageError,
+    VersionConflictError,
+)
 
 __all__ = [
     "IntegrityError",
     "MemoryDatabase",
     "MemoryDatabaseProbe",
-    "MemoryStorageError",
     "RowNotFoundError",
     "SortKey",
+    "StorageError",
     "VersionConflictError",
     "WorkItemRow",
     "keyset_page",
 ]
-
-
-class MemoryStorageError(RuntimeError):
-    """Base for every refusal these doubles make. Never raised directly."""
-
-
-class IntegrityError(MemoryStorageError):
-    """A second row under a primary key that already has one."""
-
-
-class VersionConflictError(MemoryStorageError):
-    """A write whose `expected_version` no longer matches the row.
-
-    The demo runs one worker, so this is a bug rather than contention -- which is exactly why it
-    is loud. A double that quietly applied the write would turn a lost update into a wrong
-    status nobody could trace back here.
-    """
-
-
-class RowNotFoundError(MemoryStorageError):
-    """A write against a row that is not there."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +139,7 @@ class MemoryDatabase:
 
     principals: dict[PrincipalId, Principal] = field(default_factory=dict)
     requests: dict[RequestKey, StoredRequest] = field(default_factory=dict)
+    briefs: dict[BriefId, BriefRecord] = field(default_factory=dict)
     jobs: dict[JobId, JobRecord] = field(default_factory=dict)
     work_items: dict[WorkItemId, WorkItemRow] = field(default_factory=dict)
     artifacts: dict[ArtifactId, ArtifactRecord] = field(default_factory=dict)

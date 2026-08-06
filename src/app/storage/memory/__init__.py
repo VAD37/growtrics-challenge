@@ -12,8 +12,15 @@ duplicate key, a version match, the `LEARNER`/`CLEAN` listing predicate -- it is
 `plan/13-mvp.md` already froze into an index or a constraint.
 """
 
+from app.storage.errors import (
+    IntegrityError,
+    RowNotFoundError,
+    StorageError,
+    VersionConflictError,
+)
 from app.storage.memory.access import MemoryPrincipalRepository
 from app.storage.memory.artifacts import MemoryArtifactRepository
+from app.storage.memory.briefs import MemoryBriefRepository
 from app.storage.memory.clock import FrozenClock
 from app.storage.memory.jobs import (
     CommitPoint,
@@ -24,12 +31,8 @@ from app.storage.memory.jobs import (
 from app.storage.memory.objects import MEMORY_SCHEME, MemoryObjectStore
 from app.storage.memory.queue import MemoryWorkQueue
 from app.storage.memory.state import (
-    IntegrityError,
     MemoryDatabase,
     MemoryDatabaseProbe,
-    MemoryStorageError,
-    RowNotFoundError,
-    VersionConflictError,
     WorkItemRow,
 )
 
@@ -39,16 +42,17 @@ __all__ = [
     "FrozenClock",
     "IntegrityError",
     "MemoryArtifactRepository",
+    "MemoryBriefRepository",
     "MemoryDatabase",
     "MemoryDatabaseProbe",
     "MemoryJobRepository",
     "MemoryObjectStore",
     "MemoryPrincipalRepository",
     "MemoryRequestStore",
-    "MemoryStorageError",
     "MemoryUnitOfWork",
     "MemoryWorkQueue",
     "RowNotFoundError",
+    "StorageError",
     "VersionConflictError",
     "WorkItemRow",
 ]

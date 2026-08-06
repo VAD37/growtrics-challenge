@@ -45,6 +45,11 @@ docstring-code-format = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-q"
+# `tests/support/` is builders and backend wiring, imported by the contract suite and by the
+# memory-double tests. It is on the path explicitly rather than through pytest's per-directory
+# sys.path insertion, because that only reaches a sibling of the module being collected and
+# these two callers are in different directories.
+pythonpath = ["tests"]
 
 # The import graph is the architecture (D065). A rule that is not checked is a comment.
 [tool.importlinter]

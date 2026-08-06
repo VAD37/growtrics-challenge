@@ -11,15 +11,27 @@ Two facts this file exists to absorb:
   never heard of the `+psycopg` part and rejects the whole URL, so `to_psycopg_dsn` strips it.
   The setting keeps the SQLAlchemy spelling because that string is also what a developer pastes
   into a tool, and one normalisation here is cheaper than a second correct-looking URL in .env.
-- Every call opens its own connection. @TODO this wants `psycopg_pool` before anything serves
-  real traffic; a per-request connect costs a TCP handshake and a fork on the server. It is not
-  a dependency yet (scope override: no new runtime dependency), and the demo's traffic is one
-  reviewer with curl.
+- Every call opens its own connection, and every repository method is one `async with`, so a
+  method that must be atomic is atomic by construction. @TODO this wants `psycopg_pool` before
+  anything serves real traffic; a per-request connect costs a TCP handshake and a fork on the
+  server. A pool has to be opened and closed with the process, which makes it the composition
+  root's to own rather than this module's, and neither entrypoint builds an engine yet. The
+  demo's traffic is one reviewer with curl.
 
-@TODO async psycopg needs a selector event loop. The service runs on Linux in compose, where
-that is the default and none of this matters. A developer running `uvicorn` directly on Windows
-gets a `ProactorEventLoop` and every connection raises `InterfaceError`, so the composition root
-would need `asyncio.WindowsSelectorEventLoopPolicy` before it is worth supporting that.
+Async psycopg needs a selector event loop. The service runs on Linux in compose, where that is
+the default and none of this matters. On Windows the default is a `ProactorEventLoop`, which has
+no `add_reader`, and every connect raises `InterfaceError` naming the loop it was handed. The
+fix is one line at the point where the loop is created, and it is a property of the entrypoint
+rather than of this module:
+
+    asyncio.run(serve(), loop_factory=asyncio.SelectorEventLoop)
+
+`tests/contract/conftest.py` does exactly that through pytest-asyncio's loop factory hook, which
+is what lets the SQL contract suite run on a Windows checkout. `asyncio.set_event_loop_policy`
+would also work and is deprecated for removal in 3.16, so it is not what either place uses.
+
+@TODO `app/main.py` and `app/worker.py` still call plain `asyncio.run`, and neither is wired to
+this engine yet. The loop factory belongs in both when they are.
 """
 
 from collections.abc import AsyncIterator

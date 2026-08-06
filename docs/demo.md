@@ -189,7 +189,9 @@ Done when: `uv run pytest tests/unit` passes with no application code in the rep
 - [ ] `deploy/Dockerfile`, `deploy/docker-compose.yml`: db, storage, api, worker
 - [ ] `GET /health`, reports database reachability
 - [ ] Auth stub: `X-User-Id` to `Principal` to `AccessScope`, principal upserted
-- [ ] SQL repositories for `principals`, `jobs`, `idempotency_keys`, plus the contract suite
+- [x] SQL repositories for `principals`, `requests`, `briefs`, `jobs` and `artifacts`, plus the
+      contract suite over both backends (D106). No `idempotency_keys`: the scope override removed
+      replay protection, and `requests` is the row that took its place
 - [ ] `POST /v1/jobs`: validate, admission check, derive `job_id`, insert job and work item in
       one transaction, `202`
 - [ ] `GET /v1/jobs/{job_id}` and `GET /v1/jobs`, both requiring an `AccessScope`
@@ -200,7 +202,9 @@ correct at this stage.
 
 ### D2. The loop turns
 
-- [ ] Worker entrypoint: claim a work item with `FOR UPDATE SKIP LOCKED`, hold a lease
+- [x] The claim itself: `FOR UPDATE SKIP LOCKED` under a lease, plus heartbeat, release, complete
+      and the three reads the sweep needs (D106). The worker entrypoint that calls it is not
+      wired yet; that is the composition root's
 - [ ] `intake`: sanitiser, `SanitisedText`, seal the brief, insert the row, render the file set
 - [ ] `generation`: port plus `ScriptedBackend` writing a `result.json` and a committed
       fixture video, in the shape `plan/15-engine-seam.md` defines
