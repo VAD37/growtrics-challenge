@@ -20,7 +20,15 @@ make down               # stop them
 
 ## Notes for interviewer
 
-This project does not generate a video by itself.
+I spend too much time on this project than requirements. Around 4-5 hours or so. Here is timeline:
+- 1h: mostly writing docs for agent and review
+- 1-2h: waiting subagent write code and run review/triage
+- waiting claude usage limit to reset
+- 1h: working on growtrics-llm-engine to spawn reasonable video similar to public repo `animo.video`
+
+I drop most of requirements and hardening harness check since this demo already scope creep into few days work.
+
+Note: this project does not generate a video by itself.
 The demo showcases the backend API, spawning the llm agent, mock gathering the result from LLM cloud sandbox, and mock video generation.
 
 The video generation service is test/generated from a [different repo](https://github.com/VAD37/growtrics-llm-engine).
@@ -30,7 +38,7 @@ Here is system prompt that I run on local claude terminal inside `growtrics-llm-
 ```
 You are an agent that produces STEM explainer animation, and you are an expert in Manim — the mathematical animation engine that renders video programmatically from Python.
 
-Read examples context,readme and spawn subagents to generate video.
+Read examples/ folder context, readme and spawn subagents to generate video.
 ```
 
 The rest of this `README.md` is LLM generated.
