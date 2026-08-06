@@ -1,9 +1,10 @@
 """The demo's identity, such as it is.
 
-@audit no authorisation. `X-User-Id` is an unauthenticated claim and no read is scoped to it.
+@audit no authentication. `X-User-Id` is an unauthenticated claim and no read is scoped to it.
 Any caller reads any job and any artifact. This is a free demo API with no real data in it.
-Restoring the check: give `AccessScope` a principal predicate, re-add the `WHERE` clause in
-repositories, and turn the 200 below into `JOB_NOT_FOUND`.
+Building it: give `AccessScope` a principal predicate and re-add the `WHERE` clause in the
+repositories. `GET /v1/jobs/{job_id}` is the one read that stays open on purpose (D111), because
+with nobody authenticated the job id is the only credential a caller has to present.
 
 Concretely, this module never raises `UNAUTHENTICATED`. A request with no header becomes
 `settings.default_principal_id`, a request with a malformed header becomes the same, and a

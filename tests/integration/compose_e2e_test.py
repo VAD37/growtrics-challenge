@@ -209,11 +209,11 @@ def test_a_failed_generation_is_a_two_hundred(api: httpx.Client) -> None:
 
 
 def test_a_second_user_reads_the_first_users_job(api: httpx.Client) -> None:
-    """@audit `docs/demo.md` says `404` and the running service answers `200`.
+    """The same D111 pair `pipeline_test.py` pins, checked against the running service.
 
-    The same deliberate hole `pipeline_test.py` pins: `QueryJob` takes an `AccessScope` and does
-    not consult it (scope override item 1). Asserted here as well, because the point of running
-    the walkthrough twice is that the two runs agree about what the system does.
+    `QueryJob` takes an `AccessScope` and does not consult it, so the job id is the credential
+    and an unknown id is still `404`. Asserted here as well, because the point of running the
+    walkthrough twice is that the two runs agree about what the system does.
     """
     submitted = _submit(api, user="u_e2e_owner")
     assert submitted.status_code == 202, submitted.text

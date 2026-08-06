@@ -194,17 +194,19 @@ async def test_query_returns_the_job() -> None:
     assert job.job_id == JOB_ID
 
 
-async def test_query_maps_a_missing_job_to_its_code() -> None:
+async def test_an_id_naming_no_row_is_job_not_found() -> None:
+    """The half of the read D111 keeps: existence does not depend on who is asking."""
     with pytest.raises(DomainError) as raised:
         await QueryJob(FakeJobRepository()).execute(demo_scope(), JOB_ID)
     assert raised.value.code is ErrorCode.JOB_NOT_FOUND
 
 
-async def test_any_caller_reads_any_job() -> None:
-    """@audit no ownership check. This asserts the hole rather than hiding it.
+async def test_a_second_user_reads_the_first_users_job() -> None:
+    """The decided behaviour, not an accident (D111), so a later `WHERE` clause fails here first.
 
-    `docs/demo.md` expected a second user id to get `404`; the scope override removed the check,
-    so the demo answers `200` instead. Restoring authorisation flips this test.
+    `QueryJob` takes an `AccessScope` and does not consult it. Asserting `ownership_enforced` as
+    well pins the reason: the scope reaching this use case is the permissive one the demo mints,
+    so nothing below it could have filtered on a principal even if it wanted to.
     """
     repository = FakeJobRepository()
     repository.seed(make_job(principal_id=OTHER_PRINCIPAL))

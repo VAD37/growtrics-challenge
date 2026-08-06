@@ -197,13 +197,15 @@ Done when: `uv run pytest tests/unit` passes with no application code in the rep
       one transaction, `202`
 - [x] `GET /v1/jobs/{job_id}` and `GET /v1/jobs`, both requiring an `AccessScope`
 
-Done when: submitting returns a job id, listing shows it `QUEUED`, a second user id gets `404`
-on it, and a fourth concurrent submit gets `429`. The job sits at `QUEUED` forever, which is
-correct at this stage.
+Done when: submitting returns a job id, listing shows it `QUEUED`, an id nobody minted gets
+`404`, a second user id holding a real one gets `200`, and a fourth concurrent submit gets `429`.
+The job sits at `QUEUED` forever, which is correct at this stage.
 
-Two halves of that hold and one does not. Submit, listing and the fourth submit's `429` all
-answer as written; a second user id gets `200` and not `404`, which is scope override item 1 and
-is stated as a deliberate hole in `orchestration/service.py::QueryJob`.
+All of it answers as written. The read is open on purpose (D111): the demo authenticates nobody,
+so the job id is the only thing a caller can present, and it is what the read is checked against.
+Existence is the check that survives, because it does not depend on who is asking. An earlier
+draft of this line asked for `404` to a second user id; D111 supersedes that clause, and
+`orchestration/service.py::QueryJob` says the same thing at the code.
 
 ### D2. The loop turns
 
@@ -238,11 +240,11 @@ client polls, and `FAIL_ME` in the instruction reaches `FAILED` with `GENERATION
 Done when: the script below runs end to end from a clean checkout. It does, and it is now written
 down twice rather than done by hand.
 
-Two things the run is honest about. `GET /v1/jobs/{id}` answers `200` to a second user id and not
-the `404` D1 asks for -- scope override item 1, stated in `orchestration/service.py::QueryJob` and
-pinned by an assertion in both integration tests so closing it flips a test rather than surprising
-somebody. And `GET /v1/artifacts` returns POSTER, PRIMARY and TRANSCRIPT ordered by id, so a
-client wanting the video reads `role`, which is what `job.artifact` carries for it.
+Two things the run states plainly. `GET /v1/jobs/{id}` answers `200` to a second user id and
+`404` only to an id nobody minted, which is D111: with no authentication, the id is the
+credential. Both integration tests assert it, so a later ownership check flips a test rather than
+surprising somebody. And `GET /v1/artifacts` returns POSTER, PRIMARY and TRANSCRIPT ordered by
+id, so a client wanting the video reads `role`, which is what `job.artifact` carries for it.
 
 ## The demo
 

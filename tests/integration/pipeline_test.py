@@ -276,13 +276,13 @@ async def test_a_submitted_job_becomes_a_downloadable_video(harness: Harness) ->
 
 
 async def test_a_second_user_reads_the_first_users_job(harness: Harness) -> None:
-    """@audit `docs/demo.md` says `404` here and this asserts the `200` the build actually gives.
+    """Both halves of D111 through the whole stack, because the walkthrough is where it shows.
 
-    `orchestration/service.py::QueryJob` passes the `AccessScope` and does not consult it (scope
-    override item 1), and `docs/demo.md` D1 already records the gap in prose. Asserting the
-    documented behaviour instead would be a green test about a check nobody wrote, so this pins
-    the hole where a reviewer trips over it. Closing it is one predicate in `QueryJob` plus the
-    `principal_id` column already on `jobs`, and this assertion flips to `404` on the same commit.
+    `QueryJob` passes the `AccessScope` and does not consult it: with nobody authenticated, the
+    job id is the credential and a second caller holding one reads the job. The `404` is the part
+    that survives, and it is asserted beside the `200` so the pair cannot be misread as the read
+    answering `200` to everything. Adding a predicate to `QueryJob` later flips the first
+    assertion, which is the point of pinning it.
     """
     submitted = await harness.submit()
     job_id = submitted.json()["job_id"]
@@ -291,7 +291,7 @@ async def test_a_second_user_reads_the_first_users_job(harness: Harness) -> None
     assert seen.status_code == 200
     assert seen.json()["job_id"] == job_id
 
-    # The `404` itself works: it is ownership that is not checked, not existence.
+    # Existence is still checked. It is ownership that is not, and that is the decision.
     missing = await harness.get(f"/v1/jobs/{UNKNOWN_JOB_ID}")
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "JOB_NOT_FOUND"
