@@ -1,8 +1,9 @@
 """What a worker claimed, what we pulled, and what we concluded.
 
-Three records, in the order custody produces them:
+Four records, in the order custody produces them:
 
-    ArtifactDescriptor   a claim, parsed out of an untrusted manifest by `generation.acl`
+    GenerationOutcome    the worker's manifest, carried across unopened
+    ArtifactDescriptor   a claim, parsed out of that manifest by `generation.acl`
     HarvestedFile        bytes we pulled, with our own measured size and our own sha256
     VerifiedArtifact     our verdict, our probe, and the validator version that produced them
 
@@ -20,6 +21,33 @@ from dataclasses import dataclass
 
 from app.domain.enums import ArtifactRole, Audience, ScanVerdict
 from app.domain.errors import DomainError, ErrorCode
+from app.domain.ids import SessionId
+from app.domain.records import ArtifactRecord
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationOutcome:
+    """What one generation attempt handed back, unopened.
+
+    Zeroth of the shapes below, and the only one that is not ours: `document` is the manifest a
+    worker wrote, carried exactly as it arrived. It is deliberately unparsed here. `generation.acl`
+    is the only module that turns it into the `ArtifactDescriptor`s underneath, and it runs from
+    `custody.harvester` where the bytes are pulled, so a manifest is accepted and the files it
+    names are fetched as one decision rather than two.
+
+    It lives in the domain because it crosses two seams: generation returns it, orchestration
+    carries it, custody opens it. A copy on either side would be a second statement of what a
+    worker is allowed to hand back.
+
+    `session_id` is the only identity that crossed to the worker, and the ACL checks the
+    document's own against it, so a worker cannot answer for a session it was never given.
+
+    @audit every byte of `document` is a worker's word. Nothing outside the ACL may branch on its
+    contents; doing so puts a trust decision outside the anti-corruption layer.
+    """
+
+    session_id: SessionId
+    document: Mapping[str, object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,3 +128,19 @@ class VerifiedArtifact:
 
     def skipped_checks(self) -> tuple[CheckOutcome, ...]:
         return tuple(check for check in self.checks if check.skipped)
+
+
+@dataclass(frozen=True, slots=True)
+class HarvestOutcome:
+    """What custody returns once it has harvested, verified, stored and inserted.
+
+    `primary` is the row named by `jobs.artifact_id`, and it is in `artifacts` as well. One list
+    and one lookup, so nothing has to answer "is it in both places" at serialisation time.
+
+    Here rather than in `orchestration/ports.py` for the same reason as `GenerationOutcome`: it
+    crosses a seam in both directions, custody builds it and orchestration reads it, and the
+    dependency between those two only points one way.
+    """
+
+    primary: ArtifactRecord
+    artifacts: tuple[ArtifactRecord, ...]

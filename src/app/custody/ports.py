@@ -12,11 +12,14 @@ by the SQL and object-store adapters without this package importing `app.storage
 """
 
 from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 
+from app.domain.access import AccessScope
 from app.domain.artifact import HarvestedFile, VerifiedArtifact
 from app.domain.contracts import OutputContract
-from app.domain.records import ArtifactRecord
+from app.domain.ids import ArtifactId, JobId
+from app.domain.records import ArtifactRecord, Cursor, Page
 
 
 @runtime_checkable
@@ -77,3 +80,49 @@ class ArtifactWriter(Protocol):
     """
 
     async def insert(self, record: ArtifactRecord) -> ArtifactRecord: ...
+
+
+@runtime_checkable
+class ArtifactRepository(ArtifactWriter, Protocol):
+    """`ArtifactWriter` plus the two reads the serving path needs.
+
+    One port rather than two, because `artifacts` has one owner and both storage backends already
+    implement all three methods. `ArtifactWriter` stays as the narrower name for the write half,
+    which is what `custody.store.ArtifactPublisher` takes: a publisher that could list rows is a
+    publisher somebody eventually reads with.
+
+    Every read takes an `AccessScope` first (D067). @audit none of them consults it in this build
+    (scope override item 1); see `app/storage/sql/repositories.py`.
+    """
+
+    async def get(self, scope: AccessScope, artifact_id: ArtifactId) -> ArtifactRecord | None:
+        """The row behind a content request, verdict and audience included.
+
+        Unfiltered on purpose: `custody.store.content_stream` is what refuses a quarantined or
+        operator-audience row, and it needs to see one to refuse it.
+        """
+        ...
+
+    async def list(
+        self,
+        scope: AccessScope,
+        *,
+        job_id: JobId | None,
+        cursor: Cursor | None,
+        limit: int,
+    ) -> Page[ArtifactRecord]:
+        """`LEARNER` and `CLEAN` only, newest first, optionally one job's output (D073, A6)."""
+        ...
+
+
+@runtime_checkable
+class ReadsTheClock(Protocol):
+    """`orchestration.ports.Clock`, restated.
+
+    Restated rather than imported because the dependency between these two packages points one
+    way: orchestration reaches custody, never the reverse. Structural typing means the composition
+    root hands both the same object, so a frozen clock in a test freezes `artifacts.created_at`
+    and `jobs.updated_at` together.
+    """
+
+    def now(self) -> datetime: ...

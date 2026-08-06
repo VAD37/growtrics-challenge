@@ -6,6 +6,7 @@
 #         GET  /v1/jobs                     everything this caller has submitted
 #   4     GET  /v1/artifacts?job_id=...     what that job produced
 #   5     GET  /v1/artifacts/{id}/content   the bytes, written to a file
+#   6     sha256 the file and name which committed lesson it is
 #
 # Usage: scripts/demo.sh [base-url]        default http://localhost:8000
 # Env:   USER_ID (default u_demo), OUT (default lesson.mp4), POLL_ATTEMPTS, POLL_SECONDS
@@ -13,6 +14,11 @@
 # No jq: every id in this system carries its own type prefix, so `grep -oE 'job_[0-9A-...]{26}'`
 # reads one out of a response without a JSON parser. There is no Idempotency-Key header any
 # more (scope override item 2) -- two runs of this script are two jobs.
+#
+# Step 6 is the part that makes this a proof rather than a demonstration. A downloaded file of
+# roughly the right size proves nothing: the assertion is the whole sha256 against the fixture
+# the mock backend serves from, and the script says which of the three things happened -- it
+# matched, it matched neither, or there was nothing on this machine to compare against.
 set -euo pipefail
 
 BASE_URL="${1:-http://localhost:8000}"
@@ -23,6 +29,10 @@ POLL_ATTEMPTS="${POLL_ATTEMPTS:-60}"
 POLL_SECONDS="${POLL_SECONDS:-2}"
 
 ID_BODY='[0-9A-HJKMNP-TV-Z]{26}'
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
+FIXTURE_DIR="${SCRIPT_DIR}/../src/app/generation/backends/fixtures"
+LESSONS='lesson_a.mp4 lesson_b.mp4'
 
 command -v curl >/dev/null 2>&1 || {
     printf 'demo: curl is required and was not found on PATH\n' >&2
@@ -78,9 +88,39 @@ first_id() {
     grep -oE "$1${ID_BODY}" "$BODY" | head -n 1
 }
 
+# primary_id -- the artifact id of the row whose role is PRIMARY, or empty.
+#
+# Not `first_id art_`. A successful job publishes three learner rows -- POSTER, PRIMARY and
+# TRANSCRIPT -- and the listing is ordered by (created_at, artifact_id), which for three rows
+# written in one transaction is ordered by id alone. So the first id in the response is
+# whichever of the three sorted lowest, and taking it downloads a PNG about a third of the time.
+# `tr '{' '\n'` puts each item object on its own line, which is enough structure to pair a role
+# with the id beside it without a JSON parser.
+primary_id() {
+    tr '{' '\n' <"$BODY" |
+        grep -E '"role"[[:space:]]*:[[:space:]]*"PRIMARY"' |
+        grep -oE "art_${ID_BODY}" |
+        head -n 1
+}
+
 die() {
     printf 'demo: %s\n' "$1" >&2
     exit 1
+}
+
+# sha256_of FILE -- the hex digest on stdout, or nothing and a non-zero status when this
+# machine has no hashing tool. Three spellings because the one that exists differs per
+# platform: sha256sum on Linux, shasum on macOS, openssl wherever curl already came from.
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d' ' -f1
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | cut -d' ' -f1
+    elif command -v openssl >/dev/null 2>&1; then
+        openssl dgst -sha256 "$1" | sed 's/.*= *//'
+    else
+        return 1
+    fi
 }
 
 fail() {
@@ -163,9 +203,15 @@ http GET "/v1/artifacts?job_id=${JOB_ID}"
 cat "$BODY"
 printf '\n'
 
-ARTIFACT_ID="$(first_id 'art_')"
-[ -n "$ARTIFACT_ID" ] || fail "the job succeeded but produced no artifact"
-printf 'artifact id: %s\n' "$ARTIFACT_ID"
+ARTIFACT_ID="$(primary_id)"
+[ -n "$ARTIFACT_ID" ] || fail "the job succeeded but published no PRIMARY artifact"
+printf 'primary artifact id: %s\n' "$ARTIFACT_ID"
+
+# The operator log is one of the four parts custody wrote and it is not in the response above:
+# the listing is `LEARNER` and `CLEAN` only, and that predicate lives in the index (D073, A6).
+printf 'roles listed: %s\n' \
+    "$(tr '{' '\n' <"$BODY" | grep -oE '"role"[[:space:]]*:[[:space:]]*"[A-Z]+"' |
+        grep -oE '[A-Z]+"$' | tr -d '"' | tr '\n' ' ')"
 
 # --------------------------------------------------------------------------- 5. the video
 
@@ -184,3 +230,50 @@ fi
 
 bytes="$(wc -c <"$OUT" | tr -d ' ')"
 printf '\ndemo: wrote %s (%s bytes). Play it.\n' "$OUT" "$bytes"
+
+# --------------------------------------------------------------------------- 6. is it a lesson
+
+say '6. is what came back one of the committed lessons?'
+
+digest="$(sha256_of "$OUT" || true)"
+if [ -z "$digest" ]; then
+    printf 'demo: no sha256 tool on PATH (sha256sum, shasum or openssl).\n'
+    printf 'demo: %s downloaded, bytes NOT compared against a fixture.\n' "$OUT"
+    exit 0
+fi
+printf 'sha256: %s\n' "$digest"
+
+if [ ! -d "$FIXTURE_DIR" ]; then
+    # Running from somewhere other than a checkout, e.g. against a remote host. The download
+    # worked and there is nothing here to compare it to; saying so is the honest answer.
+    printf 'demo: no fixture directory at %s.\n' "$FIXTURE_DIR"
+    printf 'demo: %s downloaded, bytes NOT compared against a fixture.\n' "$OUT"
+    exit 0
+fi
+
+matched=''
+compared=0
+for lesson in $LESSONS; do
+    [ -f "${FIXTURE_DIR}/${lesson}" ] || continue
+    compared=$((compared + 1))
+    if [ "$(sha256_of "${FIXTURE_DIR}/${lesson}")" = "$digest" ]; then
+        matched="$lesson"
+        break
+    fi
+done
+
+if [ "$compared" -eq 0 ]; then
+    printf 'demo: found no lesson fixtures in %s.\n' "$FIXTURE_DIR"
+    printf 'demo: %s downloaded, bytes NOT compared against a fixture.\n' "$OUT"
+    exit 0
+fi
+
+if [ -n "$matched" ]; then
+    printf '\ndemo: MATCH. %s is byte for byte %s.\n' "$OUT" "src/app/generation/backends/fixtures/${matched}"
+    printf 'demo: a job submitted over HTTP came back as that video.\n'
+    exit 0
+fi
+
+printf '\ndemo: NO MATCH. %s (%s bytes) is neither committed lesson.\n' "$OUT" "$bytes" >&2
+printf 'demo: the request path worked; what it served is not the file the mock backend holds.\n' >&2
+exit 1

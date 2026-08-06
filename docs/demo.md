@@ -175,52 +175,79 @@ Four. Each one ends in something a reviewer can run.
 
 ### D0. Types and migration
 
-- [ ] `domain/`: id types with prefixes, `JobStatus`, `StageName`, `ArtifactRole`, `Audience`
-- [ ] `domain/errors.py`: the eight codes above plus `ERROR_CATALOG`
-- [ ] `uuid5` derivation helpers with fixed namespaces, unit tested
-- [ ] Pydantic request and response models for the six endpoints
-- [ ] `OutputContract` registry with `video.short.v1` only
-- [ ] Migration 1: the six tables, their indexes, A5 and A6 applied
+- [x] `domain/`: id types with prefixes, `JobStatus`, `StageName`, `ArtifactRole`, `Audience`
+- [x] `domain/errors.py`: the eight codes above plus `ERROR_CATALOG`
+- [x] `uuid5` derivation helpers with fixed namespaces, unit tested
+- [x] Pydantic request and response models for the six endpoints
+- [x] `OutputContract` registry with `video.short.v1` only
+- [x] Migration 1: the six tables, their indexes, A5 and A6 applied
 
 Done when: `uv run pytest tests/unit` passes with no application code in the repo.
 
 ### D1. Submit and read
 
-- [ ] `deploy/Dockerfile`, `deploy/docker-compose.yml`: db, storage, api, worker
-- [ ] `GET /health`, reports database reachability
-- [ ] Auth stub: `X-User-Id` to `Principal` to `AccessScope`, principal upserted
-- [ ] SQL repositories for `principals`, `jobs`, `idempotency_keys`, plus the contract suite
-- [ ] `POST /v1/jobs`: validate, admission check, derive `job_id`, insert job and work item in
+- [x] `infra/Dockerfile`, `docker-compose.yml`: db, storage, api, worker, all four healthy from
+      an empty volume (D094)
+- [x] `GET /health`, reports database reachability through `SqlDatabaseProbe` (D108)
+- [x] Auth stub: `X-User-Id` to `Principal` to `AccessScope`, principal upserted
+- [x] SQL repositories for `principals`, `requests`, `briefs`, `jobs` and `artifacts`, plus the
+      contract suite over both backends (D106). No `idempotency_keys`: the scope override removed
+      replay protection, and `requests` is the row that took its place
+- [x] `POST /v1/jobs`: validate, admission check, derive `job_id`, insert job and work item in
       one transaction, `202`
-- [ ] `GET /v1/jobs/{job_id}` and `GET /v1/jobs`, both requiring an `AccessScope`
+- [x] `GET /v1/jobs/{job_id}` and `GET /v1/jobs`, both requiring an `AccessScope`
 
 Done when: submitting returns a job id, listing shows it `QUEUED`, a second user id gets `404`
 on it, and a fourth concurrent submit gets `429`. The job sits at `QUEUED` forever, which is
 correct at this stage.
 
+Two halves of that hold and one does not. Submit, listing and the fourth submit's `429` all
+answer as written; a second user id gets `200` and not `404`, which is scope override item 1 and
+is stated as a deliberate hole in `orchestration/service.py::QueryJob`.
+
 ### D2. The loop turns
 
-- [ ] Worker entrypoint: claim a work item with `FOR UPDATE SKIP LOCKED`, hold a lease
-- [ ] `intake`: sanitiser, `SanitisedText`, seal the brief, insert the row, render the file set
-- [ ] `generation`: port plus `ScriptedBackend` writing a `result.json` and a committed
-      fixture video, in the shape `plan/15-engine-seam.md` defines
-- [ ] `custody`: harvest with the path allowlist, size cap, `ResultValidator` against
-      `video.short.v1`, write bytes to object storage, insert the artifact row
-- [ ] Status transitions and the stage-to-percent map, written by `orchestration` only
-- [ ] Failure path: `failure` populated, status `FAILED`, work item not retried
+- [x] The claim itself: `FOR UPDATE SKIP LOCKED` under a lease, plus heartbeat, release, complete
+      and the three reads the sweep needs (D106), claimed by the worker entrypoint (D108)
+- [x] `intake`: sanitiser, `SanitisedText`, seal the brief, insert the row, render the file set
+- [x] `generation`: port plus `MockGenerationBackend` returning a manifest and a committed
+      lesson video, in the shape `plan/15-engine-seam.md` defines (D107)
+- [x] `custody`: harvest with the path allowlist, size cap, `ResultValidator` against
+      `video.short.v1`, write bytes to object storage, insert the artifact row. @audit most of
+      the check chain is still a stub; see `custody/verifier.py`
+- [x] Status transitions and the stage-to-percent map, written by `orchestration` only
+- [x] Failure path: `failure` populated, status `FAILED`, work item not retried
 
 Done when: a submitted job moves on its own from `QUEUED` to `SUCCEEDED` and `jobs.artifact_id`
-is set.
+is set. It does: `QUEUED/INTAKE 10%` to `RUNNING/GENERATING 60%` to `SUCCEEDED/DONE 100%` while a
+client polls, and `FAIL_ME` in the instruction reaches `FAILED` with `GENERATION_FAILED` in
+`failure.code` on a `200`.
 
 ### D3. Output retrieval
 
-- [ ] `GET /v1/artifacts`, scoped, cursor paged, optional `?job_id=`, quarantined rows excluded
-- [ ] `GET /v1/artifacts/{artifact_id}/content`, scoped, streamed from object storage, `ETag`
-- [ ] `GET /v1/jobs/{id}` carries the primary artifact summary once succeeded
+- [x] `GET /v1/artifacts`, scoped, cursor paged, optional `?job_id=`, quarantined rows excluded
+- [x] `GET /v1/artifacts/{artifact_id}/content`, scoped, streamed from object storage, `ETag`
+- [x] `GET /v1/jobs/{id}` carries the primary artifact summary once succeeded
+- [x] `scripts/demo.sh` and `scripts/demo.ps1`: the walkthrough below, runnable, ending in a
+      sha256 against the committed lesson rather than a file size
+- [x] `tests/integration/pipeline_test.py`: the same walkthrough in one process over the memory
+      doubles, in `uv run pytest` on a checkout with no Docker and no Postgres
+- [x] `tests/integration/compose_e2e_test.py`: the same walkthrough over HTTP against `make up`,
+      marked `docker`, deselected by default, skipped cleanly when nothing answers (D110)
 
-Done when: the script below runs end to end from a clean checkout.
+Done when: the script below runs end to end from a clean checkout. It does, and it is now written
+down twice rather than done by hand.
+
+Two things the run is honest about. `GET /v1/jobs/{id}` answers `200` to a second user id and not
+the `404` D1 asks for -- scope override item 1, stated in `orchestration/service.py::QueryJob` and
+pinned by an assertion in both integration tests so closing it flips a test rather than surprising
+somebody. And `GET /v1/artifacts` returns POSTER, PRIMARY and TRANSCRIPT ordered by id, so a
+client wanting the video reads `role`, which is what `job.artifact` carries for it.
 
 ## The demo
+
+`scripts/demo.sh [base-url]` is every call below, in order, with the download hashed at the end.
+`scripts/demo.ps1` is its twin. Neither needs `jq`.
 
 ```bash
 docker compose up -d
@@ -247,7 +274,14 @@ curl -H 'X-User-Id: u_demo' localhost:8000/v1/artifacts
 
 # 5
 curl -H 'X-User-Id: u_demo' -o lesson.mp4 localhost:8000/v1/artifacts/art_.../content
+
+# 6, and this is the step that makes it a proof
+sha256sum lesson.mp4 src/app/generation/backends/fixtures/lesson_a.mp4
+# -> the same digest twice
 ```
+
+`art_...` above is the **PRIMARY** row. Step 4 returns three, and the first one in the page is
+whichever id sorted lowest.
 
 ## What each cut costs to restore
 

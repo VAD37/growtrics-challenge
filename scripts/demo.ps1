@@ -8,6 +8,12 @@
           GET  /v1/jobs                     everything this caller has submitted
     4     GET  /v1/artifacts?job_id=...     what that job produced
     5     GET  /v1/artifacts/{id}/content   the bytes, written to a file
+    6     sha256 the file and name which committed lesson it is
+
+    Step 6 is what makes this a proof rather than a demonstration. A file of roughly the right
+    size proves nothing; the assertion is the whole hash against the fixture the mock backend
+    serves from, and the script says which of the three things happened -- it matched, it
+    matched neither, or there was no fixture directory here to compare against.
 
     There is no Idempotency-Key header any more (scope override item 2), so two runs of this
     script are two jobs. X-User-Id is optional (scope override item 1: no authentication, and
@@ -131,12 +137,18 @@ Write-Step "4. GET /v1/artifacts?job_id=$jobId"
 $artifacts = Invoke-Api -Method GET -Path "/v1/artifacts?job_id=$jobId"
 Write-Json $artifacts
 
+# The PRIMARY row, not items[0]. A successful job publishes POSTER, PRIMARY and TRANSCRIPT in
+# one transaction, so the listing's order is their ids' order and the first item is a PNG about
+# a third of the time.
+$primary = $artifacts.items | Where-Object { $_.role -eq "PRIMARY" } | Select-Object -First 1
 $artifactId = $null
-if ($artifacts.items -and $artifacts.items.Count -gt 0) {
-    $artifactId = $artifacts.items[0].artifact_id
-}
-if (-not $artifactId) { throw "the job succeeded but produced no artifact" }
-Write-Host "artifact id: $artifactId"
+if ($null -ne $primary) { $artifactId = $primary.artifact_id }
+if (-not $artifactId) { throw "the job succeeded but published no PRIMARY artifact" }
+Write-Host "primary artifact id: $artifactId"
+
+# The operator log is one of the four parts custody wrote and it is not in the response above:
+# the listing is LEARNER and CLEAN only, and that predicate lives in the index (D073, A6).
+Write-Host "roles listed: $(($artifacts.items | ForEach-Object { $_.role }) -join ' ')"
 
 # --------------------------------------------------------------------------- 5. the video
 
@@ -155,3 +167,47 @@ catch {
 $bytes = (Get-Item $Out).Length
 Write-Host ""
 Write-Host "demo: wrote $Out ($bytes bytes). Play it."
+
+# --------------------------------------------------------------------------- 6. is it a lesson
+
+Write-Step "6. is what came back one of the committed lessons?"
+
+$digest = (Get-FileHash -Path $Out -Algorithm SHA256).Hash.ToLower()
+Write-Host "sha256: $digest"
+
+$fixtureDir = Join-Path $PSScriptRoot "../src/app/generation/backends/fixtures"
+if (-not (Test-Path $fixtureDir)) {
+    Write-Host "demo: no fixture directory at $fixtureDir."
+    Write-Host "demo: $Out downloaded, bytes NOT compared against a fixture."
+    exit 0
+}
+
+$matched = $null
+$compared = 0
+foreach ($lesson in @("lesson_a.mp4", "lesson_b.mp4")) {
+    $path = Join-Path $fixtureDir $lesson
+    if (-not (Test-Path $path)) { continue }
+    $compared++
+    if ((Get-FileHash -Path $path -Algorithm SHA256).Hash.ToLower() -eq $digest) {
+        $matched = $lesson
+        break
+    }
+}
+
+if ($compared -eq 0) {
+    Write-Host "demo: found no lesson fixtures in $fixtureDir."
+    Write-Host "demo: $Out downloaded, bytes NOT compared against a fixture."
+    exit 0
+}
+
+if ($matched) {
+    Write-Host ""
+    Write-Host "demo: MATCH. $Out is byte for byte src/app/generation/backends/fixtures/$matched."
+    Write-Host "demo: a job submitted over HTTP came back as that video."
+    exit 0
+}
+
+Write-Host ""
+Write-Host "demo: NO MATCH. $Out ($bytes bytes) is neither committed lesson."
+Write-Host "demo: the request path worked; what it served is not the file the mock backend holds."
+exit 1

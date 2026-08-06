@@ -20,4 +20,4 @@ async def run_publish(artifacts: ArtifactWriter, *, primary: ArtifactRecord) -> 
     not published here. `docs/demo.md` cuts the deliverable endpoint, so nothing lists them yet;
     when `GET /v1/jobs/{id}/deliverable` arrives this publishes the set rather than the primary.
     """
-    return await artifacts.publish(primary.artifact_id)
+    return await artifacts.publish(primary)

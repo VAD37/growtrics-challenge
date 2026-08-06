@@ -3,14 +3,34 @@
 Demo backend: an AI chemistry video request service.
 
 ```bash
-make up      # build and start db, storage, api, worker
-make down    # stop them
+make up            # build and start db, storage, api, worker
+scripts/demo.sh    # submit a job, poll it, download the video   (scripts/demo.ps1 on Windows)
+make down          # stop them
 ```
+
+`scripts/demo.sh` is the whole walkthrough. It submits a job, polls `GET /v1/jobs/{job_id}` while
+the status climbs from `QUEUED INTAKE 10%` through `RUNNING GENERATING 60%` to
+`SUCCEEDED DONE 100%`, lists what the job produced, downloads the primary artifact to
+`lesson.mp4`, and prints its sha256 next to a plain verdict: whether those bytes are the committed
+lesson the backend serves from, or are not. Expect it to take a minute; the mock generator
+deliberately pretends to render for 10 to 60 seconds so a job can be caught mid-flight. Nothing
+is claimed that the script did not watch happen.
 
 Then `curl localhost:8000/health`. MinIO console is on `localhost:9001`.
 
-Only the spine exists: packages, entrypoints, and infrastructure. Scope and build order are
-[`docs/demo.md`](docs/demo.md).
+The video is a committed fixture, not a rendered lesson; everything around it is real. Scope and
+build order are [`docs/demo.md`](docs/demo.md).
+
+```bash
+uv sync
+uv run pytest              # everything, on a checkout with no Docker and no Postgres
+uv run pytest -m docker    # the same walkthrough over HTTP, needs `make up`
+```
+
+`tests/integration/pipeline_test.py` is the demo as a test: one process, in-memory storage, the
+real routers, worker, runner, custody and generation backend. It needs nothing running.
+`tests/integration/compose_e2e_test.py` is the same script against the live stack and is skipped
+unless you ask for it.
 
 Design docs live in [`docs/`](docs/). Start at [`docs/plan/README.md`](docs/plan/README.md).
 

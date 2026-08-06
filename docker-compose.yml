@@ -41,6 +41,12 @@ x-app-env: &app-env
   APP_JOB_STALE_SECONDS: ${APP_JOB_STALE_SECONDS:-900}
   APP_JOB_PENDING_MAX_SECONDS: ${APP_JOB_PENDING_MAX_SECONDS:-3600}
   APP_SWEEP_INTERVAL_SECONDS: ${APP_SWEEP_INTERVAL_SECONDS:-60.0}
+  # How long the mock generation backend pretends to render for, as a uniform draw. Long on
+  # purpose: the demo polls a job and watches it move, and a stage that finishes in a second is
+  # a job already SUCCEEDED by the time the first GET lands. At these bounds it is visibly
+  # RUNNING at GENERATING and 60% while a client polls it.
+  APP_MOCK_DELAY_MIN_SECONDS: ${APP_MOCK_DELAY_MIN_SECONDS:-10.0}
+  APP_MOCK_DELAY_MAX_SECONDS: ${APP_MOCK_DELAY_MAX_SECONDS:-60.0}
   APP_JOB_STREAM_TICK_SECONDS: ${APP_JOB_STREAM_TICK_SECONDS:-1.0}
   APP_JOB_STREAM_HEARTBEAT_SECONDS: ${APP_JOB_STREAM_HEARTBEAT_SECONDS:-15.0}
   APP_JOB_STREAM_MAX_SECONDS: ${APP_JOB_STREAM_MAX_SECONDS:-900.0}
@@ -73,8 +79,9 @@ services:
       timeout: 3s
       retries: 20
 
-  # @TODO create the artifacts bucket on first start; the object-store adapter is expected to
-  # create it if absent, so nothing here does it and no fifth service exists to do it either.
+  # No bucket is created here and no fifth service exists to create one: both entrypoints call
+  # `ensure_bucket` on startup (`app/composition.py`), which is a head and a create on absence,
+  # idempotent, and cheap enough to run on every boot.
   storage:
     image: minio/minio:latest # @TODO pin a release tag once the object-store adapter lands
     command: server /data --console-address ":9001"
@@ -94,13 +101,17 @@ services:
 
   api:
     <<: *app-image
-    # The migration runs to completion before uvicorn binds a port, so a request never meets a
+    # The migration runs to completion before the server binds a port, so a request never meets a
     # half-built schema and the worker never claims from a table that is not there yet. `exec`
-    # keeps uvicorn as PID 1, so `docker compose down` still reaches it with SIGTERM.
+    # keeps the server as PID 1, so `docker compose down` still reaches it with SIGTERM.
+    #
+    # `python -m app.main` and not `uvicorn app.main:app`: psycopg's async connections need a
+    # selector event loop, and the loop is created by whoever starts the server. `app/main.py`
+    # passes `loop_factory` and the CLI has no way to.
     command:
       - sh
       - -c
-      - python -m app.storage.sql.migrate && exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+      - python -m app.storage.sql.migrate && exec python -m app.main
     environment: *app-env
     ports:
       - "${API_PORT:-8000}:8000"

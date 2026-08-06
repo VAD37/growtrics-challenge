@@ -26,15 +26,19 @@ one SIGTERM drains the job in hand and stops the ticker behind it.
 
 import asyncio
 import logging
+import os
 import signal
+import socket
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Protocol
 
+from app.composition import Adapters, build_adapters, build_runner, close_resources, open_resources
 from app.config import settings
 from app.domain.records import ClaimedWorkItem, JobRecord
 from app.orchestration.engine.policy import heartbeat_interval
+from app.orchestration.engine.sweeper import run_sweeper
 from app.orchestration.ports import Clock, WorkQueue
 
 logger = logging.getLogger(__name__)
@@ -223,29 +227,89 @@ async def run_with_sweep(worker: WorkerLoop, sweep: Awaitable[None]) -> None:
             logger.exception("the sweep ticker died; the worker drained anyway")
 
 
-def build_worker(stop: asyncio.Event) -> tuple[WorkerLoop, Awaitable[None]]:
-    """@TODO wire the adapters. The composition root owns this and it is not merged yet.
+def worker_owner() -> str:
+    """Who a claim is held by, in `work_items.claimed_by`.
 
-    It needs the SQL work queue (`app/storage/sql/queue.py`), the SQL job and request
-    repositories, the intake, generation and custody services, and a real clock, assembled into
-    a `JobRunner` exactly as `app/main.py` assembles the API side, plus a `run_sweeper(...)`
-    coroutine over the same queue, job repository, clock and `stop`. Nothing in this module is
-    allowed to import an adapter itself: `app.orchestration` may not reach `app.storage`, and
-    keeping the entrypoint on the same rule is what stops that contract being routed around.
+    Host and pid, because the two questions asked of that column are "is this claim mine" (the
+    heartbeat's match, which any unique string satisfies) and "which process died holding this
+    row" (the sweep's, after the fact, which a random uuid answers with nothing). Under compose
+    the host name is the container id, so the value reads straight into `docker compose logs`.
     """
-    raise NotImplementedError(
-        "worker composition is not wired yet; see build_worker in app/worker.py"
+    return f"{socket.gethostname()}:{os.getpid()}"
+
+
+def build_worker(stop: asyncio.Event, adapters: Adapters) -> tuple[WorkerLoop, Awaitable[None]]:
+    """The claim loop and the sweep ticker, over the adapters `app.composition` builds.
+
+    Every adapter comes from that module and none is constructed here, for the same reason
+    `app/main.py` constructs none: `app.orchestration` may not reach `app.storage`, and an
+    entrypoint that reached around its own composition root is how that contract gets routed
+    around rather than broken loudly.
+
+    The two share one `Adapters`, so the claim loop and the sweep run against one connection pool
+    and one clock. They also share `stop`: one SIGTERM drains the job in hand and stops the ticker
+    behind it (`run_with_sweep`).
+
+    `adapters` is an argument rather than a call, because the sweep is a coroutine the moment it
+    is built and the pool has to be open before anything awaits it. `_serve` therefore opens
+    first and builds second.
+    """
+    config = WorkerConfig(
+        owner=worker_owner(),
+        lease_seconds=settings.work_lease_seconds,
+        poll_seconds=settings.work_claim_poll_seconds,
+        max_concurrent_jobs=settings.work_max_concurrent_jobs,
     )
+    worker = WorkerLoop(
+        queue=adapters.queue,
+        runner=build_runner(adapters),
+        clock=adapters.clock,
+        config=config,
+        stop=stop,
+    )
+    sweep = run_sweeper(
+        adapters.queue,
+        adapters.jobs,
+        adapters.clock,
+        stop=stop,
+        interval_seconds=settings.sweep_interval_seconds,
+    )
+    return worker, sweep
 
 
 async def _serve() -> None:
-    stop = asyncio.Event()
-    _install_signal_handlers(stop)
-    worker, sweep = build_worker(stop)
-    await run_with_sweep(worker, sweep)
+    """Open the pool and the bucket, run until stopped, then give the connections back.
+
+    The pool is opened before the first claim rather than lazily, so a worker that cannot reach
+    Postgres exits at start-up instead of logging a failed claim every two seconds forever. The
+    bucket goes up with it for the same reason: a store with nowhere to put an artifact should
+    stop the container, not the job that finally produced a video.
+
+    The open is inside the `try` because those are two steps and the second can fail. A bucket
+    that will not answer after the pool is already up would otherwise exit the process holding
+    connections Postgres keeps until the socket dies. `close_resources` is safe on an engine that
+    never opened, so the `finally` covers a half-finished start without a flag recording how far
+    it got.
+    """
+    adapters = build_adapters(settings)
+    try:
+        await open_resources(adapters)
+        stop = asyncio.Event()
+        _install_signal_handlers(stop)
+        worker, sweep = build_worker(stop, adapters)
+        await run_with_sweep(worker, sweep)
+    finally:
+        await close_resources(adapters)
 
 
 def main() -> None:
+    """Run the worker on a selector event loop.
+
+    psycopg's async connections need `add_reader`, which Windows's default `ProactorEventLoop`
+    does not have. On Linux, where this deploys, `SelectorEventLoop` is already the default and
+    the argument changes nothing; `asyncio.set_event_loop_policy` would do the same and is
+    deprecated for removal in 3.16. `app/main.py` says the same thing on its side.
+    """
     logging.basicConfig(level=logging.INFO)
     logger.info(
         "worker starting: lease %ss, poll %ss, %s job at a time, sweeping every %ss",
@@ -254,7 +318,7 @@ def main() -> None:
         settings.work_max_concurrent_jobs,
         settings.sweep_interval_seconds,
     )
-    asyncio.run(_serve())
+    asyncio.run(_serve(), loop_factory=asyncio.SelectorEventLoop)
 
 
 if __name__ == "__main__":

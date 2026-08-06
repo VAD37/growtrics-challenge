@@ -6,17 +6,27 @@ renderer, a voice, or an agent template repo.
 """
 
 from app.generation.backends.mock import (
+    FAIL_TOKEN,
+    LESSON_VIDEOS,
     LOG_REL_PATH,
-    MOCK_DELAY_SECONDS,
+    POSTER_REL_PATH,
     PRIMARY_REL_PATH,
     SAMPLE_VIDEO_PATH,
+    TRANSCRIPT_REL_PATH,
+    LessonFixture,
     MockGenerationBackend,
+    video_for_brief,
 )
 
 __all__ = [
+    "FAIL_TOKEN",
+    "LESSON_VIDEOS",
     "LOG_REL_PATH",
-    "MOCK_DELAY_SECONDS",
+    "POSTER_REL_PATH",
     "PRIMARY_REL_PATH",
     "SAMPLE_VIDEO_PATH",
+    "TRANSCRIPT_REL_PATH",
+    "LessonFixture",
     "MockGenerationBackend",
+    "video_for_brief",
 ]

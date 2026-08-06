@@ -1,4 +1,4 @@
-# One image, two entrypoints: `uvicorn app.main:app` and `python -m app.worker` (D053).
+# One image, two entrypoints: `python -m app.main` and `python -m app.worker` (D053).
 # Build context is the repository root: `docker build -f infra/Dockerfile .`
 
 FROM python:3.14-slim AS builder
@@ -40,4 +40,4 @@ EXPOSE 8000
 
 # No ENTRYPOINT: the image runs whatever command it is given, and compose gives it one of the
 # two from D095. The api service prefixes its command with the migration; see docker-compose.yml.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "app.main"]

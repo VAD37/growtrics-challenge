@@ -145,9 +145,31 @@ def test_no_driver_is_imported_outside_the_sql_package() -> None:
 
 DATABASE_OPERATIONS: Final[frozenset[FunctionName]] = frozenset(
     {
+        # the connection path
         "<module>",  # `_BOOKKEEPING_DDL`, the migration bookkeeping table
         "apply_migrations",
         "ping",
+        # access: principals
+        "upsert",
+        # orchestration: requests, jobs, and the submission transaction
+        "load",
+        "get",
+        "list",
+        "count_active",
+        "load_for_run",
+        "list_untouched_since",
+        "apply_transition",
+        "commit_submission",
+        # orchestration: work_items
+        "claim",
+        "heartbeat",
+        "release",
+        "complete",
+        "reclaim",
+        "exhausted",
+        "discard",
+        # intake and custody: briefs, artifacts
+        "insert",
     }
 )
 """Every function in `app/storage/sql/` that executes SQL, pinned.
@@ -155,8 +177,13 @@ DATABASE_OPERATIONS: Final[frozenset[FunctionName]] = frozenset(
 Adding one costs a line here, which is the point: a new way to talk to Postgres is a decision,
 and this list is where a reviewer reads the whole set of them at once.
 
-@TODO the repositories are not written. When `repositories.py` and `queue.py` land, this set
-grows by one name per port method and stops being three entries long.
+Names, not methods, so `list` covers the job listing and the artifact listing and `insert`
+covers both writers. That is the right granularity for the question this file asks -- what
+vocabulary does this codebase use to talk to the database -- and the wrong one for "which class
+does what", which is `app/storage/sql/repositories.py`'s own contents to answer.
+
+The set is one entry per port method and no more, which is the property worth keeping. A helper
+that grew a statement of its own would show up here as a name nobody recognises.
 """
 
 

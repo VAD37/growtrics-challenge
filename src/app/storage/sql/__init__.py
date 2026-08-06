@@ -6,6 +6,14 @@ Three files hold the ground the rest of this package stands on:
 - `migrate.py` applies it. `python -m app.storage.sql.migrate`, run before anything serves.
 - `engine.py` turns `settings.database_url` into a connection, and answers `/health`.
 
-The repositories are somebody else's file and they import `engine`. Nothing here imports a
-repository, so the migration runs in a container that never builds one.
+The adapters sit on top of them (D106):
+
+- `rows.py` is the column order and the record mapping, in one place so no statement repeats it.
+- `repositories.py` is every port except the queue: principals, requests, briefs, jobs,
+  artifacts, and the unit of work that writes a submission's three rows in one transaction.
+- `queue.py` is `work_items`, claimed with `FOR UPDATE SKIP LOCKED` under a lease.
+
+Nothing here imports a repository, so the migration still runs in a container that never builds
+one, and `app/storage/memory/` holds the same behaviour over dictionaries with the contract suite
+in `tests/contract/` holding the two to one set of assertions.
 """

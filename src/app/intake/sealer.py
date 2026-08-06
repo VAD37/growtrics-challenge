@@ -18,9 +18,11 @@ from typing import Final
 
 from app.domain.brief import (
     GuardDecision,
+    GuardVerdict,
     LessonBrief,
     guard_verdict_document,
 )
+from app.domain.enums import ProfileId
 from app.domain.errors import DomainError, ErrorCode
 from app.domain.ids import derive_brief_id
 from app.domain.records import BriefRecord, ContextItem
@@ -132,6 +134,58 @@ def seal_brief(
         template_version=template_version,
         brief_hash=brief_hash_of(payload),
         sealed_at=sealed_at,
+    )
+
+
+def guard_verdict_from_document(document: Mapping[str, object]) -> GuardVerdict:
+    """Read back what `guard_verdict_document` wrote.
+
+    Tolerant on purpose. The column is jsonb precisely because its shape moves per rule set
+    (D072), so a verdict written by an older guard must still load rather than crash a run six
+    months later. What is missing is read as "nothing matched", which is what the demo's
+    permissive guard says anyway; `guard_version` is the field that tells the two apart.
+    """
+    matched = document.get("matched_rules")
+    return GuardVerdict(
+        decision=GuardDecision(str(document.get("decision", GuardDecision.ALLOW.value))),
+        risk=int(str(document.get("risk", 0))),
+        matched_rules=tuple(str(rule) for rule in matched) if isinstance(matched, list) else (),
+        guard_version=str(document.get("guard_version", "unknown")),
+    )
+
+
+def brief_from_record(record: BriefRecord, *, profile: ProfileId) -> LessonBrief:
+    """The inverse of `brief_record`: a stored row back into the sealed brief it came from.
+
+    Needed because the seam between orchestration and generation carries the row (a `BriefRecord`
+    is what `BriefWriter.seal` returns and what `GenerationGateway.generate` takes) while the
+    renderer works from the sealed value. Only intake may do this, for the same reason only
+    intake may produce a `SanitisedText`.
+
+    The text goes back through `intake.sanitiser` rather than past its private mint. That is not
+    a formality: the sanitiser is idempotent on text it has already cleaned -- NFKC is idempotent,
+    there are no control characters left to drop, whitespace is already collapsed, and the length
+    is already under the cap -- so the string is unchanged and the type is honestly obtained.
+    `original_length` and `truncated` are re-derived and therefore describe the stored text rather
+    than what the learner first typed; nothing downstream reads either, and `brief_hash` is taken
+    from the row rather than recomputed, so the identity of the brief cannot move here.
+
+    `profile` is an argument because `briefs` has no profile column: it lives on `jobs`, which is
+    the row that carries what was asked for.
+    """
+    return LessonBrief(
+        brief_id=record.brief_id,
+        job_id=record.job_id,
+        subject=record.subject,
+        concept_id=record.concept_id,
+        instruction=sanitise_instruction(record.instruction),
+        context=sanitise_context(record.context_items),
+        constraints=record.constraints,
+        profile=profile,
+        guard=guard_verdict_from_document(record.guard_verdict),
+        template_version=record.template_version,
+        brief_hash=record.brief_hash,
+        sealed_at=record.sealed_at,
     )
 
 
