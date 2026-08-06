@@ -59,7 +59,6 @@ from app.domain.records import (
 from app.orchestration.engine.policy import lease_expired
 from app.orchestration.ports import (
     AdmissionPolicy,
-    ArtifactDescriptor,
     ArtifactReader,
     ArtifactWriter,
     BriefWriter,
@@ -181,17 +180,30 @@ def make_artifact(
     )
 
 
-def make_descriptor() -> ArtifactDescriptor:
-    return ArtifactDescriptor(
-        role=ArtifactRole.PRIMARY,
-        media_type="video/mp4",
-        size_bytes=1024,
-        source_uri="workspace://out/lesson.mp4",
-    )
+def make_document() -> dict[str, object]:
+    """A worker's manifest, in the shape `generation.ports.GenerationOutcome` parses.
+
+    Nothing in `app.orchestration` opens this; it is here because the fakes have to carry
+    something across the seam and a plausible document is more useful than an empty one.
+    """
+    return {
+        "session_id": SESSION_ID,
+        "status": "COMPLETED",
+        "descriptors": [
+            {
+                "role": ArtifactRole.PRIMARY.value,
+                "media_type": "video/mp4",
+                "rel_path": "out/lesson.mp4",
+                "size_bytes": 1024,
+                "sha256": None,
+            }
+        ],
+        "manifest": {"profile": "video.short.v1", "contract_version": "v1"},
+    }
 
 
 def make_outcome() -> GenerationOutcome:
-    return GenerationOutcome(session_id=SESSION_ID, descriptors=(make_descriptor(),))
+    return GenerationOutcome(session_id=SESSION_ID, document=make_document())
 
 
 def make_claimed_item(*, claimed_until: datetime | None = None) -> ClaimedWorkItem:
@@ -533,17 +545,18 @@ class FakeArtifactWriter:
         principal_id: PrincipalId,
         chat_context_id: ChatContextId | None,
         profile: ProfileId,
+        max_duration_s: int,
         outcome: GenerationOutcome,
     ) -> HarvestOutcome:
-        del principal_id, chat_context_id, profile, outcome
+        del principal_id, chat_context_id, profile, max_duration_s, outcome
         self.harvested.append(job_id)
         if self.raises is not None:
             raise self.raises
         return HarvestOutcome(primary=self.record, artifacts=(self.record,))
 
-    async def publish(self, artifact_id: ArtifactId) -> ArtifactRecord:
-        self.published.append(artifact_id)
-        return make_artifact(artifact_id=artifact_id, published=True)
+    async def publish(self, primary: ArtifactRecord) -> ArtifactRecord:
+        self.published.append(primary.artifact_id)
+        return make_artifact(artifact_id=primary.artifact_id, published=True)
 
 
 async def _one_chunk() -> AsyncIterator[bytes]:

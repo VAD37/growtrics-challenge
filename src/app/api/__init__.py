@@ -3,7 +3,8 @@
 `install(app)` is the whole surface this package offers the composition root: routers,
 exception handlers, and the response header that carries the schema version. One call, so
 `main.py` cannot mount half an API, and no router is reachable without the handlers that shape
-its failures.
+its failures. The one thing it takes an opinion on is the event stream, which the demo cuts; see
+the flag on `install`.
 
 The header is set by ASGI middleware rather than by each handler because it has to be on
 responses no handler produces: a `304` with no body, a `404` for an unrouted path, an error
@@ -46,7 +47,7 @@ class SchemaVersionMiddleware:
         await self.app(scope, receive, send_with_version)
 
 
-def install(app: FastAPI) -> None:
+def install(app: FastAPI, *, event_stream: bool = False) -> None:
     """Mount the demo's endpoints on an app the composition root owns.
 
     Deliberately not a `create_app()`: the composition root builds the application, chooses the
@@ -55,11 +56,17 @@ def install(app: FastAPI) -> None:
     The middleware order is deliberate. Starlette runs the last one added outermost, so the body
     cap is added first and the version header wraps it: a `413` written before any router runs
     still leaves with `X-Schema-Version` on it.
+
+    `event_stream` is off by default and the default is the demo's surface: `docs/demo.md` lists
+    six endpoints and `GET /v1/jobs/{job_id}/events` is not one of them (D091). The router is
+    built and tested, so the flag is what keeps "cut" from meaning "deleted" -- and off is the
+    default because a cut endpoint that answers has not been cut.
     """
     app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(SchemaVersionMiddleware)
     install_error_handlers(app)
     app.include_router(health.router)
     app.include_router(jobs.router)
-    app.include_router(events.router)
     app.include_router(artifacts.router)
+    if event_stream:
+        app.include_router(events.router)

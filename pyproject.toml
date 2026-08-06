@@ -11,6 +11,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
     "boto3>=1.35",
+    "psycopg-pool>=3.3.1",
 ]
 
 [dependency-groups]
@@ -105,8 +106,6 @@ source_modules = [
     "app.storage.memory",
     "app.storage.objects",
     "app.config",
-    "app.main",
-    "app.worker",
 ]
 forbidden_modules = ["psycopg", "sqlalchemy"]
 
@@ -125,9 +124,30 @@ source_modules = [
     "app.storage.memory",
     "app.storage.sql",
     "app.config",
-    "app.main",
-    "app.worker",
 ]
 forbidden_modules = ["boto3"]
+
+# The composition root is the exception, and it is one on purpose: choosing an adapter is the
+# whole of what it does, so it necessarily reaches the packages that hold a driver. What it may
+# not do is hold one itself -- a connection opened or a bucket named in `main.py` is a database
+# call outside the package that owns them. `allow_indirect_imports` is exactly that distinction:
+# the chain through `app.storage` is the wiring and is allowed, a direct `import psycopg` is not.
+[[tool.importlinter.contracts]]
+name = "the composition root wires drivers, it does not speak to them"
+type = "forbidden"
+source_modules = ["app.main", "app.worker", "app.composition"]
+forbidden_modules = ["psycopg", "sqlalchemy", "boto3"]
+allow_indirect_imports = "true"
+
+# Orchestration is reached, never reached for. It calls intake, custody and generation through
+# ports it declares; a value that has to be named on both sides -- `GenerationOutcome`,
+# `HarvestOutcome` -- lives in `app.domain` where neither lane owns it. Without this contract the
+# cheap fix for any such value is an import pointing back up, and the dependency rule in
+# `plan/03-module-layout.md` stops being a graph.
+[[tool.importlinter.contracts]]
+name = "orchestration is reached, never reached for"
+type = "forbidden"
+source_modules = ["app.intake", "app.custody", "app.generation"]
+forbidden_modules = ["app.orchestration"]
 
 # @TODO independence contract over app.orchestration.steps.* once the step modules exist.

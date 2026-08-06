@@ -9,7 +9,9 @@ make down    # stop them
 
 Then `curl localhost:8000/health`. MinIO console is on `localhost:9001`.
 
-Only the spine exists: packages, entrypoints, and infrastructure. Scope and build order are
+Submit a job and it runs: `POST /v1/jobs` queues it, the worker claims it, and
+`GET /v1/jobs/{job_id}` moves from `QUEUED` to `SUCCEEDED` with an artifact on it. The video is a
+committed fixture, not a rendered lesson; everything around it is real. Scope and build order are
 [`docs/demo.md`](docs/demo.md).
 
 Design docs live in [`docs/`](docs/). Start at [`docs/plan/README.md`](docs/plan/README.md).

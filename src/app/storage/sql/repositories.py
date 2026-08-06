@@ -394,12 +394,7 @@ class SqlUnitOfWork:
 
 
 class SqlBriefRepository:
-    """The `briefs` table. Sole writer `intake` (D066); this is what it writes through.
-
-    @TODO no port declares this shape yet, for the reason in `storage/memory/briefs.py`: the seam
-    between intake's sealing service and this table lands with the intake lane. Both backends
-    already carry the two methods it will name.
-    """
+    """`intake.ports.BriefRepository`: the `briefs` table. Sole writer `intake` (D066)."""
 
     def __init__(self, engine: SqlEngine) -> None:
         self._engine: Final[SqlEngine] = engine
@@ -437,7 +432,7 @@ class SqlBriefRepository:
 
 
 class SqlArtifactRepository:
-    """`custody.ports.ArtifactWriter`, plus the read side of the same table.
+    """`custody.ports.ArtifactRepository`: the write half and the two reads that serve it.
 
     `list` carries the two predicates `artifacts_by_principal` is partial on (A6, D088). They are
     in the statement rather than in a filter over the result because the index is where that

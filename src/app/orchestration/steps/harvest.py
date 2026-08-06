@@ -16,8 +16,10 @@ async def run_harvest(
 
     Custody is given `principal_id` and `chat_context_id` rather than left to look them up,
     because it copies both onto every artifact row at insert (A6/D088, D073) so that listing a
-    learner's artifacts stays one index scan. It is not given the `JobRecord`: it has no business
-    reading a job status, and giving it one is the first step towards writing one.
+    learner's artifacts stays one index scan. It is given `max_duration_s` and not the whole
+    `JobConstraints`, because one check reads it and the rest is none of custody's business. It
+    is not given the `JobRecord` at all: it has no business reading a job status, and giving it
+    one is the first step towards writing one.
 
     Everything that makes this safe is on the other side of the port: the path allowlist, the
     size cap, the media probe and the validator chain. This step's whole contribution is that the
@@ -28,5 +30,6 @@ async def run_harvest(
         principal_id=job.principal_id,
         chat_context_id=job.chat_context_id,
         profile=job.profile,
+        max_duration_s=job.constraints.max_duration_s,
         outcome=outcome,
     )

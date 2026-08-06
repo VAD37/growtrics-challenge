@@ -54,7 +54,9 @@ def api(
         FakePrincipalRepository(), default_principal_id=DEFAULT_PRINCIPAL
     )
     app = FastAPI()
-    install(app)
+    # `event_stream=True` where `main.py` passes the default: the streaming endpoint is cut from
+    # the demo and still has to be tested, which is what the flag is for (`app/api/__init__.py`).
+    install(app, event_stream=True)
     app.dependency_overrides[get_job_service] = lambda: job_service
     app.dependency_overrides[get_artifact_service] = lambda: artifact_service
     app.dependency_overrides[get_database_probe] = lambda: database_probe

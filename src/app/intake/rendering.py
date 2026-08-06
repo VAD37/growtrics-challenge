@@ -17,8 +17,11 @@ from typing import Final
 
 from app.domain.brief import BriefBundle, BundleFile, LessonBrief
 from app.domain.contracts import HARVEST_ROOT, OutputContract, contract_document
+from app.domain.enums import ProfileId
 from app.domain.errors import DomainError, ErrorCode
+from app.domain.records import BriefRecord
 from app.intake.ports import TemplateSource
+from app.intake.sealer import brief_from_record
 
 BRIEF_FILE: Final[str] = "BRIEF.md"
 CONTEXT_FILE: Final[str] = "CONTEXT.md"
@@ -188,3 +191,21 @@ def render_bundle(
             BundleFile(path=OUTPUT_CONTRACT_FILE, text=contract_json),
         ),
     )
+
+
+def bundle_for_record(
+    record: BriefRecord,
+    contract: OutputContract,
+    *,
+    profile: ProfileId,
+    source: TemplateSource | None = None,
+) -> BriefBundle:
+    """Render the worker's file set from a stored `briefs` row.
+
+    The seam between orchestration and generation carries the row rather than the sealed value
+    (`orchestration/ports.py`), so this is the entry point the generation lane actually uses.
+    `render_bundle` stays the one that renders, and this is one line of rehydration in front of
+    it; keeping them separate is what makes the sealing path and the rendering path testable
+    without each other.
+    """
+    return render_bundle(brief_from_record(record, profile=profile), contract, source=source)

@@ -7,9 +7,10 @@ second insert under the same id is refused rather than merged -- `brief_id` is
 `uuid5(NS_BRIEF, job_id)`, so a collision means the same job was sealed twice and one of the two
 briefs is about to be forgotten.
 
-@TODO no port declares this shape yet. `orchestration.ports.BriefWriter` is intake's service
-seen from outside -- it sanitises, seals and inserts -- and the seam between that service and
-this table lands with the intake lane. Both backends already have the method it will name.
+The port is `intake.ports.BriefRepository`, declared on intake's side because intake is the
+only lane that touches this table: `orchestration.ports.BriefWriter` is intake's service seen
+from outside -- it sanitises, seals and inserts -- and which rows that took is nobody else's
+business.
 """
 
 from app.domain.ids import BriefId

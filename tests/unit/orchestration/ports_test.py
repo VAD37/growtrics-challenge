@@ -1,24 +1,21 @@
 """The port surface itself: what crosses it, and which port is allowed to move a job.
 
-Two kinds of check. The pydantic ones guard the trust boundary a worker's manifest crosses:
-`ArtifactDescriptor` is the agent's claim about a file, so it is validated rather than believed.
-The structural ones hold the ownership rule from `plan/12-data-control.md`: only orchestration
-writes job status, and inside orchestration only one port method can.
+Two kinds of check. The first holds the seam's one rule about a worker's answer: it crosses
+unopened. `GenerationOutcome` carries the raw manifest and no parsed view of it, so there is
+exactly one place that decides what a worker may claim -- `generation.acl`, reached from
+`custody.harvester` where the bytes are pulled -- rather than one on the way through
+orchestration and another inside custody. The rest hold the ownership rule from
+`plan/12-data-control.md`: only orchestration writes job status, and inside orchestration only
+one port method can.
 """
 
 import typing
-from dataclasses import MISSING, fields
+from dataclasses import MISSING, fields, is_dataclass
 from typing import Final, get_args, get_origin
 
-import pytest
-from pydantic import ValidationError
-
-from app.domain.enums import ArtifactRole
 from app.domain.records import JobRecord
 from app.orchestration import ports
 from app.orchestration.ports import (
-    MAX_DESCRIPTORS,
-    ArtifactDescriptor,
     GenerationOutcome,
     JobRepository,
     JobTransition,
@@ -29,74 +26,35 @@ from app.orchestration.ports import (
 SESSION_ID: Final[str] = "ses_" + "0" * 26
 
 
-def _descriptor_kwargs() -> dict[str, object]:
-    return {
-        "role": ArtifactRole.PRIMARY,
-        "media_type": "video/mp4",
-        "size_bytes": 1024,
-        "source_uri": "workspace://out/lesson.mp4",
-    }
-
-
 # --------------------------------------------------------------------------- trust boundary
 
 
-def test_a_well_formed_descriptor_is_accepted() -> None:
-    descriptor = ArtifactDescriptor(**_descriptor_kwargs())
-    assert descriptor.role is ArtifactRole.PRIMARY
-    assert descriptor.size_bytes == 1024
+def test_a_generation_outcome_is_a_session_and_a_document() -> None:
+    outcome = GenerationOutcome(session_id=SESSION_ID, document={"status": "COMPLETED"})
+    assert outcome.session_id == SESSION_ID
+    assert outcome.document == {"status": "COMPLETED"}
 
 
-def test_a_descriptor_strips_whitespace_the_worker_left_behind() -> None:
-    descriptor = ArtifactDescriptor(**{**_descriptor_kwargs(), "media_type": "  video/mp4  "})
-    assert descriptor.media_type == "video/mp4"
+def test_a_generation_outcome_is_frozen() -> None:
+    """What crossed is what is carried. Nothing may edit a worker's answer in flight."""
+    outcome = GenerationOutcome(session_id=SESSION_ID, document={})
+    assert is_dataclass(outcome)
+    try:
+        outcome.session_id = "ses_" + "1" * 26  # type: ignore[misc]
+    except Exception as error:
+        assert isinstance(error, AttributeError | TypeError)
+    else:  # pragma: no cover - a mutable outcome is the failure this test exists for
+        raise AssertionError("GenerationOutcome must be frozen")
 
 
-def test_a_descriptor_is_frozen() -> None:
-    descriptor = ArtifactDescriptor(**_descriptor_kwargs())
-    with pytest.raises(ValidationError):
-        descriptor.size_bytes = 2  # type: ignore[misc]
+def test_the_outcome_carries_no_parsed_view_of_the_document() -> None:
+    """The regression this file exists to catch.
 
-
-@pytest.mark.parametrize(
-    ("field_name", "value"),
-    [
-        ("role", "SOMETHING_ELSE"),
-        ("size_bytes", -1),
-        ("media_type", ""),
-        ("source_uri", ""),
-        ("source_uri", "x" * 2000),
-    ],
-)
-def test_a_descriptor_rejects_what_a_worker_should_not_send(field_name: str, value: object) -> None:
-    with pytest.raises(ValidationError):
-        ArtifactDescriptor(**{**_descriptor_kwargs(), field_name: value})
-
-
-def test_a_descriptor_forbids_an_unknown_field() -> None:
-    """A worker cannot smuggle a field custody has never heard of."""
-    with pytest.raises(ValidationError):
-        ArtifactDescriptor(**{**_descriptor_kwargs(), "storage_uri": "s3://ours/anything"})
-
-
-def test_a_generation_outcome_rejects_a_forged_session_id() -> None:
-    with pytest.raises(ValidationError):
-        GenerationOutcome(session_id="../../etc/passwd", descriptors=())
-
-
-def test_a_generation_outcome_caps_the_file_count() -> None:
-    too_many = tuple(ArtifactDescriptor(**_descriptor_kwargs()) for _ in range(MAX_DESCRIPTORS + 1))
-    with pytest.raises(ValidationError):
-        GenerationOutcome(session_id=SESSION_ID, descriptors=too_many)
-
-
-def test_a_generation_outcome_forbids_an_unknown_field() -> None:
-    with pytest.raises(ValidationError):
-        GenerationOutcome(
-            session_id=SESSION_ID,
-            descriptors=(),
-            job_id="job_" + "0" * 26,
-        )
+    A `descriptors` field here would mean the manifest was accepted once on the way through
+    orchestration and re-read once inside custody, which is two definitions of what a worker is
+    allowed to claim and one of them outside the anti-corruption layer.
+    """
+    assert {field.name for field in fields(GenerationOutcome)} == {"session_id", "document"}
 
 
 # --------------------------------------------------------------------------- ownership

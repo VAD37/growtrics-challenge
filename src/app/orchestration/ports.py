@@ -16,8 +16,11 @@ takes one value: there is no port method anywhere that can write the `jobs` row 
 "Only orchestration writes job status" (`plan/12-data-control.md`, D066) is then a property of
 this file rather than a rule somebody has to remember.
 
-`ArtifactDescriptor` is what an agent claims it produced. It is pydantic rather than a dataclass
-because it is a trust boundary, and every field on it is the worker's word.
+`GenerationOutcome` is the worker's document, carried across unopened. Orchestration is not the
+place that parses it: `generation.acl` is, and it is reached from `custody.harvester` on the way
+to the bytes (`plan/03-module-layout.md`, rule 4). A pre-parsed descriptor list here would mean
+the manifest was accepted once on the way through orchestration and re-read once inside custody,
+which is two definitions of what a worker is allowed to claim.
 
 Supersedes D055 and D089 where they assume an idempotency key, and D060/D068 where they assume an
 ownership predicate; see the scope override. The `AccessScope` argument survives on every
@@ -27,12 +30,11 @@ re-signing methods.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Final, Protocol, runtime_checkable
-
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from typing import Protocol, runtime_checkable
 
 from app.domain.access import AccessScope
-from app.domain.enums import ArtifactRole, JobStatus, ProfileId, StageName
+from app.domain.artifact import GenerationOutcome, HarvestOutcome
+from app.domain.enums import JobStatus, ProfileId, StageName
 from app.domain.ids import (
     ArtifactId,
     BriefId,
@@ -56,51 +58,6 @@ from app.domain.records import (
     Page,
     StoredRequest,
 )
-
-MAX_DESCRIPTORS: Final[int] = 24
-"""`video.short.v1` allows 24 files in one deliverable (`plan/14-api-schema.md`).
-
-The cap lives on the inbound model so an oversized manifest is rejected before custody opens a
-single file, rather than after it has opened twenty-five.
-"""
-
-# --------------------------------------------------------------------------- what a worker claims
-
-
-class ArtifactDescriptor(BaseModel):
-    """One file the agent CLAIMS to have produced. A claim, not evidence.
-
-    Pydantic and not a dataclass because this is where untrusted data re-enters the system
-    (`plan/12-data-control.md`, "generation to custody"). `extra="forbid"` so a worker cannot
-    smuggle a field custody has never heard of, `frozen=True` so what was validated is what is
-    used, and `str_strip_whitespace=True` so a trailing newline in a manifest is not a different
-    media type.
-
-    @audit nothing on this model is believed. `media_type` and `size_bytes` are re-derived by
-    custody from the bytes it harvests, and `source_uri` is matched against the harvest allowlist
-    before anything opens it. The validation here only bounds the shape.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
-
-    role: ArtifactRole
-    media_type: Annotated[str, StringConstraints(min_length=3, max_length=128)]
-    size_bytes: Annotated[int, Field(ge=0)]
-    source_uri: Annotated[str, StringConstraints(min_length=1, max_length=1024)]
-
-
-class GenerationOutcome(BaseModel):
-    """What one generation attempt handed back, before anything has been verified.
-
-    `session_id` is the only identity that crossed to the worker, and it is validated on the way
-    back so a worker cannot answer for a session it was never given.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    session_id: SessionId
-    descriptors: Annotated[tuple[ArtifactDescriptor, ...], Field(max_length=MAX_DESCRIPTORS)]
-
 
 # --------------------------------------------------------------------------- what crosses inward
 
@@ -157,18 +114,6 @@ class JobTransition:
     brief_id: BriefId | None = None
     artifact_id: ArtifactId | None = None
     failure: FailureRecord | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class HarvestOutcome:
-    """What custody returns once it has harvested, verified, stored and inserted.
-
-    `primary` is the row named by `jobs.artifact_id`, and it is in `artifacts` as well. One list
-    and one lookup, so nothing has to answer "is it in both places" at serialisation time.
-    """
-
-    primary: ArtifactRecord
-    artifacts: tuple[ArtifactRecord, ...]
 
 
 # --------------------------------------------------------------------------- ports
@@ -391,6 +336,7 @@ class ArtifactWriter(Protocol):
         principal_id: PrincipalId,
         chat_context_id: ChatContextId | None,
         profile: ProfileId,
+        max_duration_s: int,
         outcome: GenerationOutcome,
     ) -> HarvestOutcome:
         """Fetch the claimed bytes, verify them, store them, insert the rows.
@@ -398,11 +344,22 @@ class ArtifactWriter(Protocol):
         `principal_id` and `chat_context_id` are passed in because custody copies them onto every
         artifact row at insert (A6/D088 and D073) rather than deriving them at read time. Custody
         gets no `JobRecord`: it has no business reading a status, and it cannot write one.
+
+        `max_duration_s` is the one constraint verification needs: `duration_within_bounds` is
+        judged against what this job asked for, narrowed by the profile's own cap. Passing the
+        number rather than the `JobConstraints` keeps the port to what the check reads, and
+        passing it at all is what stops custody defaulting to the cap for every job.
         """
         ...
 
-    async def publish(self, artifact_id: ArtifactId) -> ArtifactRecord:
-        """Stamp `published_at` on the primary. Custody's own column, custody's own write."""
+    async def publish(self, primary: ArtifactRecord) -> ArtifactRecord:
+        """Make the primary visible to a learner and return the row as it now stands.
+
+        Takes the row rather than its id because there is nobody to read it back as: every read
+        on the artifacts port carries an `AccessScope` (D067) and this call has no caller to mint
+        one from. The runner is holding the record custody just wrote, so handing it over costs
+        nothing and keeps the scope discipline intact.
+        """
         ...
 
 

@@ -1,6 +1,7 @@
 """The `artifacts` table in memory: one writer, two reads.
 
-`insert` is `custody.ports.ArtifactWriter`, the only way a row gets here (D066). The two reads
+`insert` is `custody.ports.ArtifactWriter`, the only way a row gets here (D066). With the two
+reads it is `custody.ports.ArtifactRepository`. Those reads
 are the ones `GET /v1/artifacts` and `GET /v1/artifacts/{id}/content` need, and both take an
 `AccessScope` first (D067).
 
@@ -20,7 +21,7 @@ __all__ = ["MemoryArtifactRepository"]
 
 
 class MemoryArtifactRepository:
-    """`custody.ports.ArtifactWriter`, plus the read side of the same table."""
+    """`custody.ports.ArtifactRepository`: the write half and the two reads that serve it."""
 
     def __init__(self, database: MemoryDatabase) -> None:
         self._database: MemoryDatabase = database

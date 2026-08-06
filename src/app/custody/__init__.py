@@ -8,7 +8,15 @@ is that module.
 """
 
 from app.custody.harvester import Harvester, content_hash_of
-from app.custody.ports import ArtifactStore, ArtifactWriter, CandidateSource, ResultValidator
+from app.custody.ports import (
+    ArtifactRepository,
+    ArtifactStore,
+    ArtifactWriter,
+    CandidateSource,
+    ReadsTheClock,
+    ResultValidator,
+)
+from app.custody.service import Custody
 from app.custody.store import (
     PUBLIC_PREFIX,
     QUARANTINE_PREFIX,
@@ -33,12 +41,15 @@ __all__ = [
     "QUARANTINE_PREFIX",
     "VALIDATOR_VERSION",
     "ArtifactPublisher",
+    "ArtifactRepository",
     "ArtifactStore",
     "ArtifactWriter",
     "CandidateSource",
     "CheckInput",
     "ContractResultValidator",
+    "Custody",
     "Harvester",
+    "ReadsTheClock",
     "ResultValidator",
     "artifact_record_for",
     "content_hash_of",

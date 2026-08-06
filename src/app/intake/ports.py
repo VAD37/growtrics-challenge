@@ -6,8 +6,8 @@ message, a resumed run, or a future HTTP-transported step all meet the same gate
 means a payload carrying `system_prompt`, `output_paths`, or `template_override` is rejected
 rather than partially honoured.
 
-`GuardPort` and `TemplateSource` are `typing.Protocol`: structural, so an adapter satisfies one
-by having the methods rather than by importing this module.
+`BriefRepository`, `GuardPort` and `TemplateSource` are `typing.Protocol`: structural, so an
+adapter satisfies one by having the methods rather than by importing this module.
 """
 
 from typing import Annotated, Final, Protocol, runtime_checkable
@@ -16,8 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.domain.brief import GuardDecision, GuardVerdict, SanitisedContextItem, SanitisedText
 from app.domain.enums import ContextKind, ProfileId, ReadingLevel
-from app.domain.ids import JOB_ID_PATTERN, JobId
-from app.domain.records import ContextItem, JobConstraints, SubmitJobCommand
+from app.domain.ids import JOB_ID_PATTERN, BriefId, JobId
+from app.domain.records import BriefRecord, ContextItem, JobConstraints, SubmitJobCommand
 
 MAX_CONTEXT_ITEMS: Final[int] = 8
 """`CreateJobRequest.context` is capped at eight items (`docs/demo.md`)."""
@@ -99,6 +99,29 @@ class RawLessonRequest(BaseModel):
             language=self.constraints.language,
             reading_level=self.constraints.reading_level,
         )
+
+
+@runtime_checkable
+class BriefRepository(Protocol):
+    """The `briefs` table, from intake's side. Sole writer of it is intake (D066).
+
+    Declared here rather than in `orchestration/ports.py` because orchestration never touches
+    this table: it asks `BriefWriter.seal` for a sealed brief and gets a record back, and which
+    rows that took is intake's business. Both storage backends already carried these two methods
+    with a `@TODO` saying no port named them; this is that port.
+
+    `load` has no caller in the demo -- the runner is handed the record `seal` just wrote -- and
+    it is on the port because a resumed run reads a brief it did not seal, and because a write
+    nothing can read back is a write nobody can check.
+    """
+
+    async def insert(self, record: BriefRecord) -> BriefRecord:
+        """Write a sealed brief. A second one under the same id is a bug, not an update."""
+        ...
+
+    async def load(self, brief_id: BriefId) -> BriefRecord | None:
+        """The sealed brief a run works from. No scope: the runner reads it, not a caller."""
+        ...
 
 
 @runtime_checkable

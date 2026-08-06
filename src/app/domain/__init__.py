@@ -9,7 +9,9 @@ from app.domain.access import AccessScope, Principal
 from app.domain.artifact import (
     ArtifactDescriptor,
     CheckOutcome,
+    GenerationOutcome,
     HarvestedFile,
+    HarvestOutcome,
     VerifiedArtifact,
 )
 from app.domain.brief import (
@@ -141,8 +143,10 @@ __all__ = [
     "ErrorCode",
     "ErrorEntry",
     "FailureRecord",
+    "GenerationOutcome",
     "GuardDecision",
     "GuardVerdict",
+    "HarvestOutcome",
     "HarvestedFile",
     "JobConstraints",
     "JobId",

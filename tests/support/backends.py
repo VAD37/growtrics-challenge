@@ -23,21 +23,27 @@ The SQL half is skipped rather than failed when Postgres is not there. `uv run p
 checkout with no Docker still passes, and `make up` is what turns the other half on.
 `APP_TEST_DATABASE_URL` overrides the address; the default is compose's `db` service as seen from
 the host, which is where it is after `make up`.
+
+@TODO that default is also a collision. The compose `worker` polls `work_items` in the same
+database every `APP_WORK_CLAIM_POLL_SECONDS`, so with the stack running it occasionally claims a
+row the queue suite has just inserted and the lease assertions fail on a claim they did not make.
+The suite is correct and the environment is shared. The fix is a database of its own -- a second
+`POSTGRES_DB` in compose and that name in `DEFAULT_TEST_DSN` -- which lands with the end-to-end
+harness (`tests/integration/`), because that is the run which has to be able to trust both.
 """
 
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Final, Protocol
+from typing import Final
 
 import psycopg
 
 from app.access.ports import PrincipalRepository
-from app.custody.ports import ArtifactWriter
-from app.domain.access import AccessScope
-from app.domain.ids import ArtifactId, BriefId, JobId, WorkItemId
-from app.domain.records import ArtifactRecord, BriefRecord, Cursor, Page
+from app.custody.ports import ArtifactRepository
+from app.domain.ids import WorkItemId
+from app.intake.ports import BriefRepository
 from app.orchestration.ports import JobRepository, RequestStore, UnitOfWork, WorkQueue
 from app.storage.memory import (
     FrozenClock,
@@ -82,29 +88,6 @@ TABLES: Final[str] = "artifacts, work_items, jobs, briefs, requests, principals"
 """Every table the suite writes. `TRUNCATE` takes them together, so no order is implied."""
 
 
-class BriefRepositoryLike(Protocol):
-    """The `briefs` half both backends already have. @TODO the port lands with intake."""
-
-    async def insert(self, record: BriefRecord) -> BriefRecord: ...
-
-    async def load(self, brief_id: BriefId) -> BriefRecord | None: ...
-
-
-class ArtifactRepositoryLike(ArtifactWriter, Protocol):
-    """`ArtifactWriter` plus the read side, which `custody.ports` declares on its reader."""
-
-    async def get(self, scope: AccessScope, artifact_id: ArtifactId) -> ArtifactRecord | None: ...
-
-    async def list(
-        self,
-        scope: AccessScope,
-        *,
-        job_id: JobId | None,
-        cursor: Cursor | None,
-        limit: int,
-    ) -> Page[ArtifactRecord]: ...
-
-
 type HoldRow = Callable[..., Awaitable[None]]
 type PeekRow = Callable[[WorkItemId], Awaitable[WorkItemRow | None]]
 
@@ -117,11 +100,11 @@ class StorageBackend:
     clock: FrozenClock
     principals: PrincipalRepository
     requests: RequestStore
-    briefs: BriefRepositoryLike
+    briefs: BriefRepository
     jobs: JobRepository
     unit_of_work: UnitOfWork
     queue: WorkQueue
-    artifacts: ArtifactRepositoryLike
+    artifacts: ArtifactRepository
 
     hold: HoldRow
     """`hold(item_id, owner=..., lease_left=..., claim_count=...)`, the dead worker's leftovers.

@@ -56,7 +56,9 @@ async def test_generate_hands_the_worker_only_a_session_id() -> None:
     )
 
     assert gateway.calls == [SESSION_ID]
-    assert outcome.descriptors[0].media_type == "video/mp4"
+    assert outcome.session_id == SESSION_ID
+    # The document crosses unopened; the step reads nothing inside it.
+    assert outcome.document["status"] == "COMPLETED"
 
 
 async def test_harvest_gives_custody_the_denormalised_columns_it_must_copy() -> None:
