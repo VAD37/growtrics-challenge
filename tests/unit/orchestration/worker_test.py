@@ -10,9 +10,10 @@ clock time; the lease deadlines come from a `FrozenClock` a test moves by hand.
 
 import asyncio
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 
+import pytest
 from fakes_test import (
     JOB_ID,
     LEASE_SECONDS,
@@ -24,6 +25,9 @@ from fakes_test import (
     make_job,
 )
 
+import app.worker
+from app.composition import Adapters, build_adapters
+from app.config import settings
 from app.domain.records import ClaimedWorkItem, JobRecord
 from app.orchestration.engine.policy import heartbeat_interval
 from app.orchestration.ports import QueuedWorkItem
@@ -288,3 +292,56 @@ async def test_a_job_in_flight_is_heartbeaten_while_it_runs() -> None:
 
     assert len(queue.heartbeats) >= 1
     assert queue.completed == [WORK_ITEM_ID]
+
+
+# --------------------------------------------------------------------------- start-up
+
+
+@dataclass(slots=True)
+class RecordingEngine:
+    """`SqlEngine`'s lifetime, counted. Opening is the step that succeeds before the bucket."""
+
+    opened: int = 0
+    closed: int = 0
+
+    async def open(self) -> None:
+        self.opened += 1
+
+    async def close(self) -> None:
+        self.closed += 1
+
+
+@dataclass(slots=True)
+class UnreachableBucket:
+    """`S3ObjectStore`, as far as `open_resources` uses it: a bucket that will not answer."""
+
+    bucket: str = "artifacts"
+
+    async def ensure_bucket(self) -> None:
+        raise RuntimeError("the object store is not there")
+
+
+def adapters_whose_bucket_is_gone(engine: RecordingEngine) -> Adapters:
+    """The real bag with the two things `open_resources` touches swapped for doubles."""
+    return replace(
+        build_adapters(settings),
+        engine=engine,
+        objects=UnreachableBucket(),
+    )
+
+
+async def test_a_bucket_that_fails_at_start_up_still_gives_the_pool_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`open_resources` opens the pool and then the bucket, so its second step failing leaves a
+    live pool behind unless the acquisition is itself inside the `try`."""
+    engine = RecordingEngine()
+    monkeypatch.setattr(
+        app.worker, "build_adapters", lambda _: adapters_whose_bucket_is_gone(engine)
+    )
+
+    with pytest.raises(RuntimeError):
+        await app.worker._serve()
+
+    assert engine.opened == 1
+    assert engine.closed == 1

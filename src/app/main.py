@@ -94,12 +94,18 @@ def _lifespan_for(adapters: Adapters):
     A failure on the way up is not swallowed. The container exits and compose restarts it, which
     is the correct answer to a database that is not there yet and a much better one than a
     process that serves `500`s while looking healthy.
+
+    The start-up itself is inside the `try`, because `open_resources` is two steps and the second
+    can fail. A bucket that will not answer after the pool is already up would otherwise exit the
+    process holding connections Postgres keeps until the socket dies. `close_resources` is safe
+    on an engine that never opened, so the `finally` covers a half-finished start without a flag
+    recording how far it got.
     """
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        await open_resources(adapters)
         try:
+            await open_resources(adapters)
             yield
         finally:
             await close_resources(adapters)
