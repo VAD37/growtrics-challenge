@@ -261,6 +261,7 @@ EXPECTED_INDEXES: Final[dict[IndexName, TableName]] = {
     "jobs_active": "jobs",
     "jobs_by_request_key": "jobs",
     "work_items_claimable": "work_items",
+    "work_items_lapsed": "work_items",
     "artifacts_by_principal": "artifacts",
     "artifacts_by_job": "artifacts",
     "artifacts_by_hash": "artifacts",
@@ -295,6 +296,23 @@ def test_the_queue_index_only_covers_unclaimed_rows() -> None:
         part for part in _statements(SCHEMA) if part.startswith("CREATE INDEX work_items_claimable")
     )
     assert "WHERE claimed_by IS NULL" in statement
+
+
+def test_the_sweep_indexes_answer_the_questions_the_sweep_asks() -> None:
+    """Every sweep query is "oldest rows in this state, capped". An index that stops at the state
+    still sorts the whole backlog, and the backlog is the reason the sweep exists."""
+    by_name = {
+        part.split(" ON ")[0].removeprefix("CREATE INDEX ").strip(): part
+        for part in _statements(SCHEMA)
+        if part.startswith("CREATE INDEX ")
+    }
+
+    # `fail_pending_jobs`: QUEUED, untouched since a moment, oldest first, limited.
+    assert "updated_at" in by_name["jobs_active"]
+
+    # `reclaim` and `exhausted`: held and past the lease, which `work_items_claimable` excludes.
+    assert "claimed_until" in by_name["work_items_lapsed"]
+    assert "WHERE claimed_by IS NOT NULL" in by_name["work_items_lapsed"]
 
 
 # --------------------------------------------------------------------------- the connection path

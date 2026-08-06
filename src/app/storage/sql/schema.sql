@@ -86,8 +86,12 @@ CREATE TABLE jobs (
 
 CREATE INDEX jobs_by_principal ON jobs (principal_id, created_at DESC);
 
--- The admission count of D090 reads this one: three active jobs and the fourth submit is a 429.
-CREATE INDEX jobs_active ON jobs (status) WHERE status IN ('QUEUED', 'RUNNING');
+-- Two readers, one index. The admission count of D090 needs the leading column only: three
+-- active jobs and the fourth submit is a 429. The sweep needs the second, because it asks for
+-- the oldest QUEUED rows untouched since a moment and then stops at a limit. Without
+-- `updated_at` here that ORDER BY is a sort of every queued row, which on the 50k backlog the
+-- sweep exists for is the whole table -- so the release valve would cost more than the jam.
+CREATE INDEX jobs_active ON jobs (status, updated_at) WHERE status IN ('QUEUED', 'RUNNING');
 
 CREATE INDEX jobs_by_request_key ON jobs (request_key);
 
@@ -106,6 +110,12 @@ CREATE TABLE work_items (
 );
 
 CREATE INDEX work_items_claimable ON work_items (available_at) WHERE claimed_by IS NULL;
+
+-- The mirror of it, for the sweep. `reclaim` and `exhausted` ask the opposite question -- held,
+-- and past the lease -- so the index above cannot answer either: its predicate excludes exactly
+-- the rows they want. Held rows are the small half of a healthy queue, which is what makes this
+-- one cheap to keep and worth having when the other half is 50k deep.
+CREATE INDEX work_items_lapsed ON work_items (claimed_until) WHERE claimed_by IS NOT NULL;
 
 -- custody --------------------------------------------------------------
 

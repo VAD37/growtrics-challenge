@@ -26,6 +26,11 @@ x-app-env: &app-env
   APP_OBJECT_STORE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
   APP_OBJECT_STORE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
   APP_OBJECT_STORE_BUCKET: ${APP_OBJECT_STORE_BUCKET:-artifacts}
+  # A presigned url is signed against the host the client will use, which is not the host the
+  # API connects on: http://storage:9000 resolves on the compose network only. The port is the
+  # published one, so changing MINIO_PORT moves the signature with it.
+  APP_OBJECT_STORE_PUBLIC_ENDPOINT: ${APP_OBJECT_STORE_PUBLIC_ENDPOINT:-http://localhost:${MINIO_PORT:-9000}}
+  APP_OBJECT_STORE_PRESIGN_TTL_SECONDS: ${APP_OBJECT_STORE_PRESIGN_TTL_SECONDS:-300}
   # Every remaining setting in src/app/config.py that a deployment would move. Same values as
   # the Python defaults; passing them explicitly is what makes .env.example complete.
   APP_ADMISSION_MAX_ACTIVE_JOBS: ${APP_ADMISSION_MAX_ACTIVE_JOBS:-3}
@@ -34,6 +39,11 @@ x-app-env: &app-env
   APP_WORK_MAX_CONCURRENT_JOBS: ${APP_WORK_MAX_CONCURRENT_JOBS:-1}
   APP_WORK_MAX_CLAIMS: ${APP_WORK_MAX_CLAIMS:-3}
   APP_JOB_STALE_SECONDS: ${APP_JOB_STALE_SECONDS:-900}
+  APP_JOB_PENDING_MAX_SECONDS: ${APP_JOB_PENDING_MAX_SECONDS:-3600}
+  APP_SWEEP_INTERVAL_SECONDS: ${APP_SWEEP_INTERVAL_SECONDS:-60.0}
+  APP_JOB_STREAM_TICK_SECONDS: ${APP_JOB_STREAM_TICK_SECONDS:-1.0}
+  APP_JOB_STREAM_HEARTBEAT_SECONDS: ${APP_JOB_STREAM_HEARTBEAT_SECONDS:-15.0}
+  APP_JOB_STREAM_MAX_SECONDS: ${APP_JOB_STREAM_MAX_SECONDS:-900.0}
   APP_PAGE_DEFAULT_LIMIT: ${APP_PAGE_DEFAULT_LIMIT:-20}
   APP_PAGE_MAX_LIMIT: ${APP_PAGE_MAX_LIMIT:-100}
   APP_ARTIFACT_TOTAL_MAX_BYTES: ${APP_ARTIFACT_TOTAL_MAX_BYTES:-83886080}
