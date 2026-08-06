@@ -233,7 +233,12 @@ client polls, and `FAIL_ME` in the instruction reaches `FAILED` with `GENERATION
 - [x] `scripts/demo.sh` and `scripts/demo.ps1`: the walkthrough below, runnable, ending in a
       sha256 against the committed lesson rather than a file size
 - [x] `scripts/api_demo.py`: the same walkthrough printed call by call, every artifact
-      downloaded and checked against its `ETag`, standard library only (D112)
+      downloaded and checked against its `ETag`, standard library only (D112), run by
+      `make demo` (D113)
+- [x] All six endpoints exercised by that script, including the unfiltered `GET /v1/artifacts`,
+      plus the second caller reading the first one's job. `--full` adds the two answers off the
+      learner's path: `FAILED` with `GENERATION_FAILED` on a `200`, and the fourth submit
+      refused `429` (D114)
 - [x] `tests/integration/pipeline_test.py`: the same walkthrough in one process over the memory
       doubles, in `uv run pytest` on a checkout with no Docker and no Postgres
 - [x] `tests/integration/compose_e2e_test.py`: the same walkthrough over HTTP against `make up`,

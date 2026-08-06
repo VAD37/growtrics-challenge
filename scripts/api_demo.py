@@ -16,6 +16,13 @@ How to run
     python scripts/api_demo.py
     python scripts/api_demo.py --base-url http://some-host:8000 --out-dir ./demo-out
     python scripts/api_demo.py --instruction "what is a mole" --no-color
+    python scripts/api_demo.py --full
+
+Steps 0 to 8 are the default walk and every one of them is on the path a learner takes. `--full`
+adds steps 9 and 10, which are not: a `FAIL_ME` job polled to `FAILED`, and four submits under a
+caller minted for the step to provoke `429 TOO_MANY_ACTIVE_JOBS`. Those are four more renders on
+a worker that runs one job at a time, and step 10 waits for the three it started rather than
+leaving them in front of whatever runs next, so the flag roughly triples the wall clock (D114).
 
 Standard library only, Python 3.9 or newer. No `uv sync`, no `requests`, no `jq`, and nothing
 imported from `src/app`: a client assembled out of the server's own code proves less than one
@@ -369,14 +376,13 @@ def step_submit(api: Api, instruction: str) -> str:
     return job_id
 
 
-def step_poll(api: Api, job_id: str, poll_seconds: float, poll_timeout: float) -> dict:
-    ink = api.ink
-    heading(ink, "2", f"GET /v1/jobs/{job_id} -- poll until it stops moving")
-    print("    One line per poll. A line is marked when the status, stage or percent moved,")
-    print("    so the state machine is visible rather than described. The first and the last")
-    print("    poll print the whole job document; the ones in between would just repeat it.")
-    print()
+def poll_until_terminal(api: Api, job_id: str, poll_seconds: float, poll_timeout: float) -> dict:
+    """Poll one job to any terminal status and return its last document, `_elapsed_s` stamped.
 
+    Which terminal status is acceptable is the caller's business, not this loop's: step 2 wants
+    `SUCCEEDED` and step 8 wants `FAILED`, and both want the same transcript on the way there.
+    """
+    ink = api.ink
     started = time.monotonic()
     previous = None
     document: dict = {}
@@ -426,14 +432,24 @@ def step_poll(api: Api, job_id: str, poll_seconds: float, poll_timeout: float) -
             "(the mock generator sleeps 10 to 60s on purpose)"
         )
     )
+    document["_elapsed_s"] = total
+    return document
 
+
+def step_poll(api: Api, job_id: str, poll_seconds: float, poll_timeout: float) -> dict:
+    heading(api.ink, "2", f"GET /v1/jobs/{job_id} -- poll until it stops moving")
+    print("    One line per poll. A line is marked when the status, stage or percent moved,")
+    print("    so the state machine is visible rather than described. The first and the last")
+    print("    poll print the whole job document; the ones in between would just repeat it.")
+    print()
+
+    document = poll_until_terminal(api, job_id, poll_seconds, poll_timeout)
     status = str(document.get("status"))
     if status != "SUCCEEDED":
         failure = document.get("failure") or {}
         code = failure.get("code", "no code")
         message = failure.get("message", "no message")
         raise DemoFailure(f"the job ended {status}: {code} -- {message}")
-    document["_elapsed_s"] = total
     return document
 
 
@@ -482,6 +498,23 @@ def step_list_artifacts(api: Api, job_id: str) -> list:
         "learner-facing,",
     )
     note(ink, "and that exclusion lives in a partial index rather than in a filter (D073, A6).")
+
+    print()
+    print(ink.bold("    the same endpoint with the filter taken off: GET /v1/artifacts"))
+    print("    Not this caller's artifacts, despite X-User-Id being sent. ListArtifacts applies")
+    print("    no ownership predicate, so this is every learner-facing artifact in the database,")
+    print("    whoever made it -- the same hole the job listing has in step 3, marked @audit at")
+    print("    orchestration/service.py::ListArtifacts. What it does exclude is quarantined and")
+    print("    operator rows, which is the partial index and not an ownership check.")
+    print()
+    everything = api.send("GET", "/v1/artifacts")
+    if everything.status != 200:
+        raise DemoFailure(f"the unfiltered artifact listing failed with HTTP {everything.status}")
+    page = everything.json() or {}
+    listed = len(page.get("items") or [])
+    tail = page.get("next_cursor")
+    print(f"    {listed} artifact(s) in this page (default limit 20)")
+    print(f"    next_cursor {tail or '(none -- this page is all of them)'}")
     return items
 
 
@@ -594,9 +627,28 @@ def step_summary(api: Api, job_id: str, document: dict, downloads: list) -> None
     )
 
 
+def step_stranger(api: Api, job_id: str) -> None:
+    ink = api.ink
+    heading(ink, "7", "GET /v1/jobs/{id} under a different X-User-Id -- the expected 200")
+    stranger = Api(api.base_url, "u_not_the_submitter", ink)
+    print("    Same job id as step 1, a caller who did not submit it. The answer is 200, and")
+    print("    that is a decision rather than an oversight (D111): with no authentication, the")
+    print("    job id is the only thing a caller can present, so it is what the read checks.")
+    print("    An ownership predicate over an unverified header would refuse nobody anyway --")
+    print(ink.bold("    somebody after another learner's job would send that learner's id."))
+    print()
+    reply = stranger.send("GET", f"/v1/jobs/{job_id}")
+    if reply.status != 200:
+        raise DemoFailure(
+            f"a second caller reading a real job answered {reply.status}, expected 200 (D111)"
+        )
+    note(ink, "@audit the absence of authentication is real and this step is what it looks like.")
+    note(ink, "It is the line to change before a deployment, not before a demo.")
+
+
 def step_missing_job(api: Api) -> None:
     ink = api.ink
-    heading(ink, "7", "GET /v1/jobs/{id} for a job that does not exist -- the expected 404")
+    heading(ink, "8", "GET /v1/jobs/{id} for a job that does not exist -- the expected 404")
     print("    The id below is well formed, so it reaches the service rather than bouncing off")
     print("    the router as a 400. There is no such job, so the answer is a 404 inside the")
     print(ink.bold("    same error envelope every failure uses. This 404 is the expected result."))
@@ -607,7 +659,116 @@ def step_missing_job(api: Api) -> None:
             f"reading a job that does not exist answered {reply.status}, expected 404"
         )
     note(ink, "404 as expected. Reading a job is open to any caller holding the id, by design,")
-    note(ink, "so a wrong caller is not what produces this -- a wrong id is.")
+    note(ink, "so a wrong caller is not what produces this -- a wrong id is. Step 7 is that.")
+
+
+def step_failed_job(api: Api, poll_seconds: float, poll_timeout: float) -> None:
+    ink = api.ink
+    heading(ink, "9", "a job that fails -- FAILED on the job, 200 on the request")
+    print("    FAIL_ME anywhere in the instruction makes the mock backend report a failed run")
+    print("    (D107). Everything else about the submit is ordinary, so this walks the same")
+    print("    pipeline and ends somewhere else.")
+    print()
+
+    job_id = None
+    reply = api.send("POST", "/v1/jobs", {"instruction": "FAIL_ME please break on purpose"})
+    if reply.status == 429:
+        raise DemoFailure(
+            "the failure step could not submit: this caller already has three jobs in flight "
+            "(D090). Run --full on its own, or pass a different --user-id"
+        )
+    if reply.status not in (200, 201, 202):
+        raise DemoFailure(f"the failing submit answered HTTP {reply.status}")
+    job_id = (reply.json() or {}).get("job_id")
+    if not job_id:
+        raise DemoFailure("the failing submit returned no job_id")
+
+    document = poll_until_terminal(api, job_id, poll_seconds, poll_timeout)
+    status = str(document.get("status"))
+    failure = document.get("failure") or {}
+    code = failure.get("code")
+
+    print()
+    if status != "FAILED":
+        raise DemoFailure(f"a FAIL_ME job ended {status}, expected FAILED")
+    if code != "GENERATION_FAILED":
+        raise DemoFailure(
+            f"the failed job carries failure.code {code!r}, expected GENERATION_FAILED"
+        )
+
+    print(
+        ink.green(f"    status {status}, failure.code {code}, and every poll above answered 200.")
+    )
+    print("    That last part is the point. The job failed; the request to read the job did not,")
+    print("    so the failure arrives in the document as data rather than as an HTTP status.")
+    note(
+        ink, "artifact is null on a failed job: nothing was published, so there is nothing to get."
+    )
+
+
+def drain(api: Api, job_ids: list, poll_seconds: float, poll_timeout: float) -> None:
+    """Wait for jobs a step started for its own reasons, quietly, one line each at the end.
+
+    Not politeness. The worker is single-flight on purpose (`work_max_concurrent_jobs` is 1,
+    and `worker.py` warns if it is set to anything else), so three renders left running are up
+    to three minutes sitting in front of whatever anybody runs next -- and the thing they
+    usually run next is `scripts/demo.sh`, which gives up after 60 polls. A step that walks away
+    from its own jobs does not save that time, it spends somebody else's.
+    """
+    ink = api.ink
+    for job_id in job_ids:
+        started = time.monotonic()
+        while True:
+            reply = api.send("GET", f"/v1/jobs/{job_id}", announce=False)
+            if reply.status != 200:
+                raise DemoFailure(f"draining {job_id} answered HTTP {reply.status}")
+            status = str((reply.json() or {}).get("status", "?"))
+            elapsed = time.monotonic() - started
+            if status in TERMINAL_STATUSES:
+                print(f"    drained {job_id} -> {status} after {elapsed:.1f}s")
+                break
+            if elapsed > poll_timeout:
+                raise DemoFailure(f"draining {job_id} gave up with it still {status}")
+            time.sleep(poll_seconds)
+    print(ink.dim("    the queue is empty again, so the next run starts from where this one did"))
+
+
+def step_admission_cap(api: Api, poll_seconds: float, poll_timeout: float) -> None:
+    ink = api.ink
+    heading(ink, "10", "four submits from one caller -- the expected 429 on the fourth")
+    # A caller of this step's own, stamped with the clock. The count is per principal, so
+    # borrowing --user-id would make the answer depend on what that caller happened to have left
+    # running, and the whole point of the step is that the fourth submit is refused for a reason
+    # the step created itself.
+    loud = Api(api.base_url, f"u_cap_{int(time.time())}", ink)
+    print(f"    A caller minted for this step: {loud.user_id}")
+    print("    Admission is one indexed count before anything is inserted: three jobs already")
+    print("    QUEUED or RUNNING for a principal and the fourth submit is refused (D090). It is")
+    print("    not a rate limit and it is not authorisation -- it is the answer to whether this")
+    print("    service can take another job right now.")
+    print()
+
+    accepted = []
+    for attempt in range(1, 5):
+        reply = loud.send("POST", "/v1/jobs", {"instruction": f"cap probe {attempt}"})
+        expected = 429 if attempt == 4 else 202
+        if reply.status != expected:
+            raise DemoFailure(
+                f"submit {attempt} of 4 answered {reply.status}, expected {expected} -- the "
+                "admission cap is not behaving as D090 describes"
+            )
+        print(ink.bold(f"    submit {attempt} of 4 -> {reply.status}"))
+        if reply.status == 202:
+            accepted.append((reply.json() or {}).get("job_id"))
+
+    print()
+    print(ink.green("    The fourth was refused with TOO_MANY_ACTIVE_JOBS, in the same error"))
+    print(ink.green("    envelope as every other failure."))
+    print()
+    print("    Now the three that were accepted are drained, because the worker takes one job")
+    print("    at a time and leaving them queued would make the next run of anything wait.")
+    print("    This is most of what --full costs.")
+    drain(loud, [one for one in accepted if one], poll_seconds, poll_timeout)
 
 
 # --------------------------------------------------------------------------------- the driver
@@ -624,6 +785,15 @@ def parse_args(argv: list | None = None) -> argparse.Namespace:
     parser.add_argument("--poll-seconds", type=float, default=2.0)
     parser.add_argument("--poll-timeout", type=float, default=300.0)
     parser.add_argument("--no-color", action="store_true")
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help=(
+            "add steps 9 and 10: a FAIL_ME job polled to FAILED, and four submits that provoke "
+            "429 TOO_MANY_ACTIVE_JOBS. Both need jobs of their own and the worker runs one at a "
+            "time, so this costs four more renders and roughly triples the wall clock"
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -647,7 +817,12 @@ def run(args: argparse.Namespace, ink: Ink) -> None:
     items = step_list_artifacts(api, job_id)
     downloads = step_download(api, items, args.out_dir)
     step_summary(api, job_id, document, downloads)
+    step_stranger(api, job_id)
     step_missing_job(api)
+
+    if args.full:
+        step_failed_job(api, args.poll_seconds, args.poll_timeout)
+        step_admission_cap(api, args.poll_seconds, args.poll_timeout)
 
     print()
     print(ink.green(RULE))

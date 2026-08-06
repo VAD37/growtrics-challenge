@@ -5,6 +5,7 @@
 #   3     GET  /v1/jobs/{job_id}            poll until the status is terminal
 #         GET  /v1/jobs                     everything this caller has submitted
 #   4     GET  /v1/artifacts?job_id=...     what that job produced
+#         GET  /v1/artifacts                the same listing with the filter taken off
 #   5     GET  /v1/artifacts/{id}/content   the bytes, written to a file
 #   6     sha256 the file and name which committed lesson it is
 #
@@ -212,6 +213,24 @@ printf 'primary artifact id: %s\n' "$ARTIFACT_ID"
 printf 'roles listed: %s\n' \
     "$(tr '{' '\n' <"$BODY" | grep -oE '"role"[[:space:]]*:[[:space:]]*"[A-Z]+"' |
         grep -oE '[A-Z]+"$' | tr -d '"' | tr '\n' ' ')"
+
+say '4b. GET /v1/artifacts -- the same endpoint with the filter taken off'
+http GET /v1/artifacts
+[ "$STATUS" = "200" ] || fail "listing artifacts unfiltered failed with HTTP $STATUS"
+cat "$BODY"
+printf '\n'
+
+# Not "the caller's artifacts". X-User-Id is sent on this call and then ignored: the listing
+# applies no ownership predicate, so this is every learner-facing artifact in the database,
+# whoever made it. That is a known hole, marked @audit at orchestration/service.py::ListArtifacts,
+# and the same one the job listing has. What the response does exclude is quarantined and
+# operator-audience rows, because that predicate is in the index rather than in an ownership
+# check (D073, A6).
+#
+# One "artifact_id" key per item, so counting the key counts the page without a JSON parser.
+# A page, not the table: the default limit is 20 and next_cursor names the rest.
+printf 'artifacts in this page: %s (default limit 20; next_cursor holds any more)\n' \
+    "$(grep -oE '"artifact_id"' "$BODY" | wc -l | tr -d ' ' || true)"
 
 # --------------------------------------------------------------------------- 5. the video
 

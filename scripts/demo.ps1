@@ -7,6 +7,7 @@
     3     GET  /v1/jobs/{job_id}            poll until the status is terminal
           GET  /v1/jobs                     everything this caller has submitted
     4     GET  /v1/artifacts?job_id=...     what that job produced
+          GET  /v1/artifacts                the same listing with the filter taken off
     5     GET  /v1/artifacts/{id}/content   the bytes, written to a file
     6     sha256 the file and name which committed lesson it is
 
@@ -149,6 +150,21 @@ Write-Host "primary artifact id: $artifactId"
 # The operator log is one of the four parts custody wrote and it is not in the response above:
 # the listing is LEARNER and CLEAN only, and that predicate lives in the index (D073, A6).
 Write-Host "roles listed: $(($artifacts.items | ForEach-Object { $_.role }) -join ' ')"
+
+Write-Step "4b. GET /v1/artifacts -- the same endpoint with the filter taken off"
+$allArtifacts = Invoke-Api -Method GET -Path "/v1/artifacts"
+Write-Json $allArtifacts
+
+# Not "the caller's artifacts". X-User-Id is sent on this call and then ignored: the listing
+# applies no ownership predicate, so this is every learner-facing artifact in the database,
+# whoever made it. That is a known hole, marked @audit at orchestration/service.py::ListArtifacts,
+# and the same one the job listing has. What the response does exclude is quarantined and
+# operator-audience rows, because that predicate is in the index rather than in an ownership
+# check (D073, A6).
+#
+# A page, not the table: the default limit is 20 and next_cursor names the rest.
+$listed = @($allArtifacts.items).Count
+Write-Host "artifacts in this page: $listed (default limit 20; next_cursor holds any more)"
 
 # --------------------------------------------------------------------------- 5. the video
 
