@@ -34,12 +34,14 @@ tests is free to empty every table without deleting a running job.
 `prepare_database` creates it rather than compose, because Postgres runs `POSTGRES_DB` and its
 init scripts only on an empty data directory. A second name in compose would appear on a fresh
 volume and be missing on every machine that had already run `make up` once, which is the worst
-of the two failure modes: the suite would be green here and red on the reviewer's checkout.
-`CREATE DATABASE` from the fixture is one statement, it is idempotent, and it works either way.
+of the two failure modes: the suite would be green here and red on the reviewer's checkout. The
+fixture looks for the name and creates it when it is absent, and treats losing that race to
+another process as the same success, so it works either way and works twice over.
 """
 
 import os
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Final
@@ -241,7 +243,11 @@ def ensure_database(dsn: str) -> str | None:
         ) as connection:
             cursor = connection.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,))
             if cursor.fetchone() is None:
-                connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+                # Postgres has no `CREATE DATABASE IF NOT EXISTS`, so the look and the create are
+                # two statements and another process can land between them. Losing that race means
+                # the database exists, which is what this function was asked for.
+                with suppress(psycopg.errors.DuplicateDatabase):
+                    connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
     except psycopg.OperationalError as error:
         return f"no Postgres at {dsn}: {str(error).strip().splitlines()[0]}"
     return None
