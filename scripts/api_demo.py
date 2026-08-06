@@ -57,7 +57,7 @@ RULE = "=" * 78
 # Crockford base32 body, 26 characters, so this is a well-formed id that no ULID will ever be.
 ABSENT_JOB_ID = "job_" + "0" * 26
 
-FIXTURE_LESSONS = ("lesson_a.mp4", "lesson_b.mp4")
+FIXTURE_LESSONS = ("covalent_bonds.mp4", "ionic_vs_covalent.mp4", "ph_scale.mp4")
 FIXTURE_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "src",

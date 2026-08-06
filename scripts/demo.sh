@@ -33,7 +33,7 @@ ID_BODY='[0-9A-HJKMNP-TV-Z]{26}'
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 FIXTURE_DIR="${SCRIPT_DIR}/../src/app/generation/backends/fixtures"
-LESSONS='lesson_a.mp4 lesson_b.mp4'
+LESSONS='covalent_bonds.mp4 ionic_vs_covalent.mp4 ph_scale.mp4'
 
 command -v curl >/dev/null 2>&1 || {
     printf 'demo: curl is required and was not found on PATH\n' >&2

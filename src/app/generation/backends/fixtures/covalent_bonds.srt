@@ -1,0 +1,83 @@
+1
+00:00:00,000 --> 00:00:02,180
+Here is one chlorine atom.
+
+2
+00:00:02,266 --> 00:00:05,886
+Its outer shell has eight places for electrons.
+
+3
+00:00:05,933 --> 00:00:13,753
+Count them in. One, two, three, four, five, six, seven.
+
+4
+00:00:13,800 --> 00:00:16,892
+Seven. One place is left empty.
+
+5
+00:00:16,933 --> 00:00:19,713
+One electron short of a full shell.
+
+6
+00:00:19,840 --> 00:00:24,804
+Bring a second chlorine alongside. Same atom, same problem.
+
+7
+00:00:24,840 --> 00:00:28,892
+So take one. The left atom is full now. Eight.
+
+8
+00:00:28,940 --> 00:00:34,024
+But the right atom is two short. The hole moved. It did not close.
+
+9
+00:00:34,073 --> 00:00:38,965
+And the right atom pulls just as hard. Same element, same pull.
+
+10
+00:00:39,006 --> 00:00:41,873
+Both pull on the same electron. Nobody
+
+11
+00:00:41,973 --> 00:00:44,762
+wins a tug of war against themselves.
+
+12
+00:00:46,305 --> 00:00:49,685
+So neither of them lets go. Both hold on.
+
+13
+00:00:49,738 --> 00:00:54,486
+One electron from each, into the space the two shells share.
+
+14
+00:00:54,538 --> 00:00:59,430
+Count for the left atom. Six of its own, plus the shared pair.
+
+15
+00:00:59,471 --> 00:01:00,091
+Eight.
+
+16
+00:01:00,471 --> 00:01:05,507
+Now count for the right atom. Six of its own, plus the same pair.
+
+17
+00:01:05,605 --> 00:01:06,681
+Eight as well.
+
+18
+00:01:06,738 --> 00:01:11,630
+The same two electrons, counted twice. That is the whole trick.
+
+19
+00:01:11,756 --> 00:01:14,608
+That shared pair is the covalent bond.
+
+20
+00:01:15,122 --> 00:01:18,341
+Neither atom can afford to lose an electron, so
+
+21
+00:01:18,441 --> 00:01:21,094
+they share, and both of them get eight.

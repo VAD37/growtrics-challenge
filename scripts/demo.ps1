@@ -200,7 +200,7 @@ if (-not (Test-Path $fixtureDir)) {
 
 $matched = $null
 $compared = 0
-foreach ($lesson in @("lesson_a.mp4", "lesson_b.mp4")) {
+foreach ($lesson in @("covalent_bonds.mp4", "ionic_vs_covalent.mp4", "ph_scale.mp4")) {
     $path = Join-Path $fixtureDir $lesson
     if (-not (Test-Path $path)) { continue }
     $compared++

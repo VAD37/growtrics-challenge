@@ -10,7 +10,8 @@ of those can fail the memory-backed suite and all of them fail this one.
 The one file it reads from disk is a committed lesson video, and only to compare bytes. A
 download that matched "some mp4 of about the right size" would pass against a service that
 served the wrong file, so the assertion is the whole content against
-`src/app/generation/backends/fixtures/lesson_a.mp4` or `lesson_b.mp4`, found by path.
+`src/app/generation/backends/fixtures/covalent_bonds.mp4` or one of the two lessons beside
+it, found by path.
 
 **Skipped by default.** `pytest.ini_options.addopts` carries `-m 'not docker'`, so
 `uv run pytest` on a checkout with nothing running never reaches this file. `uv run pytest -m
@@ -61,7 +62,11 @@ TERMINAL: Final[frozenset[str]] = frozenset({"SUCCEEDED", "FAILED", "CANCELLED"}
 FIXTURE_ROOT: Final[Path] = (
     Path(__file__).resolve().parents[2] / "src" / "app" / "generation" / "backends" / "fixtures"
 )
-LESSON_FILES: Final[tuple[str, ...]] = ("lesson_a.mp4", "lesson_b.mp4")
+LESSON_FILES: Final[tuple[str, ...]] = (
+    "covalent_bonds.mp4",
+    "ionic_vs_covalent.mp4",
+    "ph_scale.mp4",
+)
 
 
 def _base_url() -> str:

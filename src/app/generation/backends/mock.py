@@ -7,11 +7,11 @@ Every stage still runs; only the thing that makes the video is fake.
 
 Four properties the demo depends on:
 
-* **The fixtures are real media.** `fixtures/lesson_a.mp4` and `fixtures/lesson_b.mp4` are
-  rendered chemistry lessons with a poster and a transcript beside them, so
+* **The fixtures are real media.** The three lessons under `fixtures/` came out of real runs of
+  the engine repository, each with a poster and a transcript beside it, so
   `GET /v1/artifacts/{id}/content` streams something that plays and `container_is_mp4` runs
   against real bytes rather than a renamed text file.
-* **The video depends on the brief.** Which of the two comes back is folded out of
+* **The video depends on the brief.** Which of the three comes back is folded out of
   `bundle.brief_hash`, so two different jobs return two different files and the same brief
   returns the same one. A backend that answered with one hardcoded path could not tell those
   apart, and neither could a reviewer watching the demo.
@@ -51,9 +51,6 @@ Not what this backend serves. It is the cheap stand-in for tests that need nothi
 well-formed MP4, so the suite does not read a megabyte to assert on an `ftyp` box.
 """
 
-POSTER_PATH: Final[Path] = FIXTURE_ROOT / "poster.png"
-TRANSCRIPT_PATH: Final[Path] = FIXTURE_ROOT / "transcript.txt"
-
 PRIMARY_REL_PATH: Final[str] = "out/lesson.mp4"
 POSTER_REL_PATH: Final[str] = "out/poster.png"
 TRANSCRIPT_REL_PATH: Final[str] = "out/transcript.txt"
@@ -76,20 +73,42 @@ wrong place even if it were spelled the same way.
 
 @dataclass(frozen=True, slots=True)
 class LessonFixture:
-    """One committed lesson: the file, and how long it actually runs.
+    """One committed lesson: four files that belong together, and how long the video runs.
+
+    A lesson carries its own poster and transcript rather than sharing one pair between all of
+    them, because they came out of one engine run together and a fake that mixed them would put
+    the wrong narration next to the video for no reason other than convenience.
 
     `duration_s` is measured from the file and reported in the manifest as a claim. A worker's
     duration is never evidence (`custody/verifier.py` measures its own), but a fake that claimed
-    a number contradicting its own bytes would make the claim/evidence gap look like a bug.
+    a number contradicting its own bytes would make the claim/evidence gap look like a bug. The
+    same number is in `<slug>.result.json`, and a unit test holds the two together.
     """
 
+    slug: str
     path: Path
+    poster_path: Path
+    transcript_path: Path
+    result_path: Path
     duration_s: float
 
 
+def _lesson(slug: str, duration_s: float) -> LessonFixture:
+    """One engine run's four files, named off the slug. See `fixtures/README.md`."""
+    return LessonFixture(
+        slug=slug,
+        path=FIXTURE_ROOT / f"{slug}.mp4",
+        poster_path=FIXTURE_ROOT / f"{slug}.png",
+        transcript_path=FIXTURE_ROOT / f"{slug}.txt",
+        result_path=FIXTURE_ROOT / f"{slug}.result.json",
+        duration_s=duration_s,
+    )
+
+
 LESSON_VIDEOS: Final[tuple[LessonFixture, ...]] = (
-    LessonFixture(path=FIXTURE_ROOT / "lesson_a.mp4", duration_s=64.6),
-    LessonFixture(path=FIXTURE_ROOT / "lesson_b.mp4", duration_s=82.3),
+    _lesson("covalent_bonds", duration_s=81.2),
+    _lesson("ionic_vs_covalent", duration_s=88.6),
+    _lesson("ph_scale", duration_s=65.6),
 )
 """The catalog `generate` picks from. See `fixtures/README.md` for what these files are."""
 
@@ -129,14 +148,10 @@ class MockGenerationBackend:
         self,
         *,
         videos: tuple[LessonFixture, ...] = LESSON_VIDEOS,
-        poster_path: Path = POSTER_PATH,
-        transcript_path: Path = TRANSCRIPT_PATH,
         delay_min_seconds: float = settings.mock_delay_min_seconds,
         delay_max_seconds: float = settings.mock_delay_max_seconds,
     ) -> None:
         self._videos: tuple[LessonFixture, ...] = videos
-        self._poster_path: Path = poster_path
-        self._transcript_path: Path = transcript_path
         self.delay_min_seconds: float = delay_min_seconds
         self.delay_max_seconds: float = delay_max_seconds
         self._workspaces: dict[str, dict[str, bytes]] = {}
@@ -163,8 +178,8 @@ class MockGenerationBackend:
         video = video_for_brief(request.bundle.brief_hash, self._videos)
         files: dict[str, bytes] = {
             PRIMARY_REL_PATH: video.path.read_bytes(),
-            POSTER_REL_PATH: self._poster_path.read_bytes(),
-            TRANSCRIPT_REL_PATH: self._transcript_path.read_bytes(),
+            POSTER_REL_PATH: video.poster_path.read_bytes(),
+            TRANSCRIPT_REL_PATH: video.transcript_path.read_bytes(),
             LOG_REL_PATH: self._agent_log(request, video),
         }
         self._workspaces[request.session_id] = files
@@ -257,7 +272,7 @@ class MockGenerationBackend:
         Carries the trace id and the brief hash and no learner text, so an operator can join it
         to a job without the log itself becoming a second copy of what somebody typed. The
         fixture name is on it because "which video did this job get" is the question the hash
-        pick exists to answer, and answering it from the bytes alone means watching two videos.
+        pick exists to answer, and answering it from the bytes alone means watching three videos.
         """
         lines = [
             {

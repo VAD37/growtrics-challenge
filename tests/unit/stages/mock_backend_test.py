@@ -1,5 +1,7 @@
 """The mock backend: fixtures behind the real port, and fixtures that are real media."""
 
+import hashlib
+import json
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,11 +20,9 @@ from app.generation.backends.mock import (
     FAIL_TOKEN,
     LESSON_VIDEOS,
     LOG_REL_PATH,
-    POSTER_PATH,
     POSTER_REL_PATH,
     PRIMARY_REL_PATH,
     SAMPLE_VIDEO_PATH,
-    TRANSCRIPT_PATH,
     TRANSCRIPT_REL_PATH,
     MockGenerationBackend,
     video_for_brief,
@@ -82,7 +82,7 @@ def _is_real_mp4(data: bytes) -> bool:
     return data[4:8] == b"ftyp" and b"mdat" in data and b"moov" in data
 
 
-@pytest.mark.parametrize("video", LESSON_VIDEOS, ids=lambda item: item.path.name)
+@pytest.mark.parametrize("video", LESSON_VIDEOS, ids=lambda item: item.slug)
 def test_the_committed_lessons_are_real_mp4s(video) -> None:
     """A renamed text file would pass every test in this file except this one."""
     data = video.path.read_bytes()
@@ -91,16 +91,37 @@ def test_the_committed_lessons_are_real_mp4s(video) -> None:
     assert 100 * 1024 < len(data) < 8 * 1024 * 1024
 
 
-def test_the_committed_poster_is_a_real_png() -> None:
-    assert POSTER_PATH.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+@pytest.mark.parametrize("video", LESSON_VIDEOS, ids=lambda item: item.slug)
+def test_every_lesson_brings_its_own_poster_and_transcript(video) -> None:
+    """One pair shared between all of them would put the wrong narration on the wrong video."""
+    assert video.poster_path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    assert video.transcript_path.read_bytes().decode("utf-8").strip()
 
 
-def test_the_committed_transcript_is_utf8_text() -> None:
-    assert TRANSCRIPT_PATH.read_bytes().decode("utf-8").strip()
+@pytest.mark.parametrize("video", LESSON_VIDEOS, ids=lambda item: item.slug)
+def test_the_engine_result_document_describes_the_bytes_beside_it(video) -> None:
+    """The fabricated `result.json` and the committed files drift apart silently otherwise.
+
+    `bytes` and `sha256` are the parts of that document measured off these files rather than
+    written by hand, so they are the parts worth pinning. `duration_s` is pinned against the
+    catalog's own number, which is what the manifest claims to a client.
+    """
+    document = json.loads(video.result_path.read_text(encoding="utf-8"))
+    by_role = {item["role"]: item for item in document["artifacts"]}
+    sources = {
+        "video": video.path,
+        "transcript": video.transcript_path,
+        "poster": video.poster_path,
+    }
+    for role, source in sources.items():
+        data = source.read_bytes()
+        assert by_role[role]["bytes"] == len(data), role
+        assert by_role[role]["sha256"] == "sha256:" + hashlib.sha256(data).hexdigest(), role
+    assert abs(by_role["video"]["duration_s"] - video.duration_s) < 0.1
 
 
-def test_the_two_lessons_are_different_files() -> None:
-    """The hash pick proves nothing if both branches land on the same bytes."""
+def test_the_lessons_are_different_files() -> None:
+    """The hash pick proves nothing if every branch lands on the same bytes."""
     assert len({video.path.read_bytes() for video in LESSON_VIDEOS}) == len(LESSON_VIDEOS)
 
 
@@ -156,7 +177,7 @@ def test_the_video_is_a_function_of_the_brief_hash() -> None:
         assert video_for_brief(brief_hash) is video_for_brief(brief_hash)
 
 
-def test_both_lessons_are_reachable() -> None:
+def test_every_lesson_is_reachable() -> None:
     """A pick that always lands on one file is a hardcoded path with arithmetic in front."""
     picked = {video_for_brief(f"sha256:{index:064x}") for index in range(64)}
     assert picked == set(LESSON_VIDEOS)
@@ -166,7 +187,7 @@ async def test_two_different_briefs_can_get_two_different_videos() -> None:
     """What proves the bytes came from this job rather than from a constant."""
     backend = _backend()
     served: set[bytes] = set()
-    for index in range(16):
+    for index in range(32):
         request = _request(f"explain reaction number {index}")
         await backend.generate(request)
         served.add(await backend.fetch(SESSION_ID, PRIMARY_REL_PATH, max_bytes=64 * 1024 * 1024))
@@ -247,10 +268,11 @@ async def test_fetch_serves_the_fixture_bytes_unchanged() -> None:
     request = _request()
     await backend.generate(request)
 
+    lesson = video_for_brief(request.bundle.brief_hash)
     expected: dict[str, Path] = {
-        PRIMARY_REL_PATH: video_for_brief(request.bundle.brief_hash).path,
-        POSTER_REL_PATH: POSTER_PATH,
-        TRANSCRIPT_REL_PATH: TRANSCRIPT_PATH,
+        PRIMARY_REL_PATH: lesson.path,
+        POSTER_REL_PATH: lesson.poster_path,
+        TRANSCRIPT_REL_PATH: lesson.transcript_path,
     }
     for rel_path, source in expected.items():
         data = await backend.fetch(SESSION_ID, rel_path, max_bytes=64 * 1024 * 1024)
@@ -281,12 +303,14 @@ async def test_fetch_stops_one_byte_past_the_cap() -> None:
 
 async def test_the_agent_log_carries_the_trace_and_no_learner_text() -> None:
     backend = _backend()
-    request = _request()
+    # A word no fixture name can contain, because the log does name the fixture it served and
+    # one of those fixtures is called `covalent_bonds`.
+    request = _request("explain why bleach smells the way it does")
     await backend.generate(request)
     log = await backend.fetch(SESSION_ID, LOG_REL_PATH, max_bytes=8 * 1024 * 1024)
     text = log.decode("utf-8")
     assert request.trace_id in text
     assert request.bundle.brief_hash in text
-    assert "covalent" not in text
+    assert "bleach" not in text
     for line in text.splitlines():
         assert line.startswith("{")

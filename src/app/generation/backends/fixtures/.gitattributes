@@ -1,0 +1,7 @@
+# These files are checked out byte for byte or the fixtures stop being fixtures.
+#
+# `<slug>.result.json` records a sha256 over `<slug>.txt` and `<slug>.srt`, and a checkout that
+# turned their line endings into CRLF would change those bytes and fail
+# `test_the_engine_result_document_describes_the_bytes_beside_it` on somebody else's machine and
+# nowhere else. `-text` on everything here is what stops git touching them at all.
+* -text

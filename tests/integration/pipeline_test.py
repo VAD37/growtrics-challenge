@@ -258,7 +258,7 @@ async def test_a_submitted_job_becomes_a_downloadable_video(harness: Harness) ->
         row.artifact_id for row in written if row.audience is Audience.LEARNER
     }
 
-    # 5. The bytes, and they are one of the two committed lessons rather than a length that
+    # 5. The bytes, and they are one of the committed lessons rather than a length that
     # happens to agree.
     artifact_id = done["artifact"]["artifact_id"]
     content = await harness.get(f"/v1/artifacts/{artifact_id}/content")

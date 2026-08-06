@@ -1,0 +1,64 @@
+{
+  "schema_version": "1",
+  "status": "ok",
+  "run_id": "run_example_ph_scale",
+  "title": "How does the pH scale work?",
+  "subject": "chemistry",
+  "artifacts": [
+    {
+      "path": "out/video.mp4",
+      "role": "video",
+      "bytes": 2204064,
+      "sha256": "sha256:8b4af3a150b518a6d1cd13e9a465941de66229bc10d2d1048fbd3167592fd947",
+      "duration_s": 65.644,
+      "width": 854,
+      "height": 480,
+      "fps": 15.0,
+      "has_audio": true
+    },
+    {
+      "path": "out/transcript.txt",
+      "role": "transcript",
+      "bytes": 808,
+      "sha256": "sha256:979d3001ae24dc22e81f97e8659f428b590cd4b4b697afaae5211d06fbe768f9"
+    },
+    {
+      "path": "out/poster.png",
+      "role": "poster",
+      "bytes": 20298,
+      "sha256": "sha256:4380105f2c1c5d84097813838b20acd30cf0fe9d9cc89a6aed28208d9cf3aec1"
+    }
+  ],
+  "review": {
+    "passed": true,
+    "score": null,
+    "findings": [
+      {
+        "check": "duration_within_bounds",
+        "passed": true,
+        "blocking": true,
+        "detail": "65.6s in [25,90]"
+      },
+      {
+        "check": "audio_track_present",
+        "passed": true,
+        "blocking": true,
+        "detail": "aac, 2ch, 48000 Hz"
+      },
+      {
+        "check": "resolution_at_least_720p",
+        "passed": false,
+        "blocking": false,
+        "detail": "854x480"
+      }
+    ],
+    "notes": []
+  },
+  "degraded": [
+    "poster: the run emitted none, this frame was cut from the video afterwards",
+    "transcript: derived from final.srt by dropping indices and timecodes"
+  ],
+  "failure": null,
+  "engine_version": "0.2.0",
+  "elapsed_s": 0.0
+}

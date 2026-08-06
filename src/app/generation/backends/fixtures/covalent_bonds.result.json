@@ -1,0 +1,64 @@
+{
+  "schema_version": "1",
+  "status": "ok",
+  "run_id": "run_example_covalent",
+  "title": "Why do atoms form covalent bonds?",
+  "subject": "chemistry",
+  "artifacts": [
+    {
+      "path": "out/video.mp4",
+      "role": "video",
+      "bytes": 2400436,
+      "sha256": "sha256:de9cd13619e954965e5b48cc616e8437c27ae0c1b294d681f3ebdda0f6117600",
+      "duration_s": 81.228,
+      "width": 854,
+      "height": 480,
+      "fps": 15.0,
+      "has_audio": true
+    },
+    {
+      "path": "out/transcript.txt",
+      "role": "transcript",
+      "bytes": 959,
+      "sha256": "sha256:5381fc0c82bda8ae9e8b3f93400f0b089b300ca2856daf1d130a29455ad6ec33"
+    },
+    {
+      "path": "out/poster.png",
+      "role": "poster",
+      "bytes": 21736,
+      "sha256": "sha256:98423cc47c1fa30e2760dd178ccfc0f41779e90affaf2f050ea02226bf635479"
+    }
+  ],
+  "review": {
+    "passed": true,
+    "score": null,
+    "findings": [
+      {
+        "check": "duration_within_bounds",
+        "passed": true,
+        "blocking": true,
+        "detail": "81.2s in [20,90]"
+      },
+      {
+        "check": "audio_track_present",
+        "passed": true,
+        "blocking": true,
+        "detail": "aac, 2ch, 48000 Hz"
+      },
+      {
+        "check": "resolution_at_least_720p",
+        "passed": false,
+        "blocking": false,
+        "detail": "854x480"
+      }
+    ],
+    "notes": []
+  },
+  "degraded": [
+    "poster: the run emitted none, this frame was cut from the video afterwards",
+    "transcript: derived from final.srt by dropping indices and timecodes"
+  ],
+  "failure": null,
+  "engine_version": "0.2.0",
+  "elapsed_s": 0.0
+}

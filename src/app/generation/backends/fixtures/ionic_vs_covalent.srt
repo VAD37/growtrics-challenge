@@ -1,0 +1,91 @@
+1
+00:00:00,000 --> 00:00:02,684
+Every atom wants a full outer shell.
+
+2
+00:00:02,733 --> 00:00:06,713
+Chlorine has seven electrons, and one empty place.
+
+3
+00:00:07,133 --> 00:00:09,097
+There are two ways to fill it.
+
+4
+00:00:09,200 --> 00:00:12,364
+Ionic on the left. Covalent on the right.
+
+5
+00:00:12,501 --> 00:00:15,329
+On the left, sodium meets chlorine.
+
+6
+00:00:15,367 --> 00:00:19,011
+Sodium has just one outer electron to lose.
+
+7
+00:00:19,101 --> 00:00:23,369
+So it hands it over. It is chlorine's electron now.
+
+8
+00:00:23,434 --> 00:00:27,150
+Chlorine turns negative. Sodium turns positive.
+
+9
+00:00:27,234 --> 00:00:31,430
+Opposite charges pull. That pull is the ionic bond.
+
+10
+00:00:31,573 --> 00:00:34,329
+On the right, chlorine meets chlorine.
+
+11
+00:00:34,373 --> 00:00:37,899
+Both have seven. Neither can spare one, so they
+
+12
+00:00:37,999 --> 00:00:41,449
+each push one electron into the space between.
+
+13
+00:00:41,506 --> 00:00:44,790
+That pair counts for both. Both reach eight.
+
+14
+00:00:44,839 --> 00:00:51,171
+Notice: no electron left. No charges. Sharing is the covalent bond.
+
+15
+00:00:51,307 --> 00:00:54,918
+Charges do not stop at two. Every ion pulls the
+
+16
+00:00:55,018 --> 00:00:59,103
+ones around it, into a giant lattice that melts high.
+
+17
+00:00:59,173 --> 00:01:04,281
+A shared pair is finished. You get separate molecules that melt low.
+
+18
+00:01:04,506 --> 00:01:07,829
+Side by side, then. Ionic is a metal
+
+19
+00:01:07,929 --> 00:01:12,014
+and a non-metal. Covalent is two non-metals.
+
+20
+00:01:12,106 --> 00:01:16,158
+Ionic gives electrons away. Covalent shares them.
+
+21
+00:01:16,239 --> 00:01:21,275
+Ionic makes charged ions. Covalent makes neutral molecules.
+
+22
+00:01:21,372 --> 00:01:24,752
+Ionic melts high. Covalent melts low.
+
+23
+00:01:24,839 --> 00:01:28,459
+Remember one row. Given away, or shared.

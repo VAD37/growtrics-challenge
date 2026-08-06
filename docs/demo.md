@@ -285,7 +285,7 @@ curl -H 'X-User-Id: u_demo' localhost:8000/v1/artifacts
 curl -H 'X-User-Id: u_demo' -o lesson.mp4 localhost:8000/v1/artifacts/art_.../content
 
 # 6, and this is the step that makes it a proof
-sha256sum lesson.mp4 src/app/generation/backends/fixtures/lesson_a.mp4
+sha256sum lesson.mp4 src/app/generation/backends/fixtures/covalent_bonds.mp4
 # -> the same digest twice
 ```
 

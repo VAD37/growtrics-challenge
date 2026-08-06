@@ -1,0 +1,68 @@
+1
+00:00:00,000 --> 00:00:03,697
+You have seen this strip. Zero is the strongest
+
+2
+00:00:03,797 --> 00:00:08,060
+acid, seven is neutral, fourteen the strongest alkali.
+
+3
+00:00:08,133 --> 00:00:10,721
+So one is more acid than two. But
+
+4
+00:00:10,821 --> 00:00:13,817
+how much more? The strip does not say.
+
+5
+00:00:13,866 --> 00:00:16,094
+It looks like a made up ranking.
+
+6
+00:00:16,733 --> 00:00:20,497
+So stop reading the numbers, and look inside the liquid.
+
+7
+00:00:20,566 --> 00:00:25,938
+This is the acid at pH one. Every red dot is one acid particle.
+
+8
+00:00:25,999 --> 00:00:28,443
+In one beaker of it, a hundred.
+
+9
+00:00:28,599 --> 00:00:31,139
+Now take one tenth of that liquid.
+
+10
+00:00:31,199 --> 00:00:34,963
+Put it in a fresh beaker and top it up with water.
+
+11
+00:00:35,065 --> 00:00:41,373
+Same size beaker. But only ten particles left inside. That is pH two.
+
+12
+00:00:41,465 --> 00:00:45,757
+Do it again. One tenth of this one, topped up with water.
+
+13
+00:00:45,799 --> 00:00:48,723
+Now one particle. pH three.
+
+14
+00:00:48,845 --> 00:00:52,489
+Each step along the scale is the same ten times.
+
+15
+00:00:52,578 --> 00:00:58,022
+pH one to pH three is two steps, so a hundred times fewer.
+
+16
+00:00:58,111 --> 00:01:01,227
+Nothing here was ranked. Something was counted.
+
+17
+00:01:01,311 --> 00:01:04,811
+One step down the scale is ten times more acid.
+

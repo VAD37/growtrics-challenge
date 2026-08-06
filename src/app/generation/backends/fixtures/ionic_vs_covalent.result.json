@@ -1,0 +1,64 @@
+{
+  "schema_version": "1",
+  "status": "ok",
+  "run_id": "run_example_ionic_vs_covalent",
+  "title": "What is the difference between ionic and covalent bonding?",
+  "subject": "chemistry",
+  "artifacts": [
+    {
+      "path": "out/video.mp4",
+      "role": "video",
+      "bytes": 3036752,
+      "sha256": "sha256:dceecc8ca6118eadc252130bb36bbaddeb38ddacfff6099a60dbf87685cfa1af",
+      "duration_s": 88.592,
+      "width": 854,
+      "height": 480,
+      "fps": 15.0,
+      "has_audio": true
+    },
+    {
+      "path": "out/transcript.txt",
+      "role": "transcript",
+      "bytes": 1082,
+      "sha256": "sha256:48bc20ca26d542d99ed6004c4ed0ce3a39a1d67a97f42f2abcd7be12d9b45125"
+    },
+    {
+      "path": "out/poster.png",
+      "role": "poster",
+      "bytes": 30886,
+      "sha256": "sha256:87fe4400c78d3c074e80bf50f10ec88a83653da5de68eb8ef555799ac362c1af"
+    }
+  ],
+  "review": {
+    "passed": true,
+    "score": null,
+    "findings": [
+      {
+        "check": "duration_within_bounds",
+        "passed": true,
+        "blocking": true,
+        "detail": "88.6s in [30,110]"
+      },
+      {
+        "check": "audio_track_present",
+        "passed": true,
+        "blocking": true,
+        "detail": "aac, 2ch, 48000 Hz"
+      },
+      {
+        "check": "resolution_at_least_720p",
+        "passed": false,
+        "blocking": false,
+        "detail": "854x480"
+      }
+    ],
+    "notes": []
+  },
+  "degraded": [
+    "poster: the run emitted none, this frame was cut from the video afterwards",
+    "transcript: derived from final.srt by dropping indices and timecodes"
+  ],
+  "failure": null,
+  "engine_version": "0.2.0",
+  "elapsed_s": 0.0
+}
