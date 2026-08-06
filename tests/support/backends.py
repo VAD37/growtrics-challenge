@@ -24,12 +24,18 @@ checkout with no Docker still passes, and `make up` is what turns the other half
 `APP_TEST_DATABASE_URL` overrides the address; the default is compose's `db` service as seen from
 the host, which is where it is after `make up`.
 
-@TODO that default is also a collision. The compose `worker` polls `work_items` in the same
-database every `APP_WORK_CLAIM_POLL_SECONDS`, so with the stack running it occasionally claims a
-row the queue suite has just inserted and the lease assertions fail on a claim they did not make.
-The suite is correct and the environment is shared. The fix is a database of its own -- a second
-`POSTGRES_DB` in compose and that name in `DEFAULT_TEST_DSN` -- which lands with the end-to-end
-harness (`tests/integration/`), because that is the run which has to be able to trust both.
+**It is a database of its own, and that is not a tidiness preference.** The compose `worker`
+polls `work_items` every `APP_WORK_CLAIM_POLL_SECONDS`, so pointed at the application's database
+this suite would insert a queue row and occasionally have the worker claim it out from under an
+assertion about who holds the lease. The suite would be correct and red. `app_test` is a name
+nothing in `docker-compose.yml` mentions, so no container can reach it, and `TRUNCATE` between
+tests is free to empty every table without deleting a running job.
+
+`prepare_database` creates it rather than compose, because Postgres runs `POSTGRES_DB` and its
+init scripts only on an empty data directory. A second name in compose would appear on a fresh
+volume and be missing on every machine that had already run `make up` once, which is the worst
+of the two failure modes: the suite would be green here and red on the reviewer's checkout.
+`CREATE DATABASE` from the fixture is one statement, it is idempotent, and it works either way.
 """
 
 import os
@@ -37,8 +43,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Final
+from urllib.parse import urlsplit, urlunsplit
 
 import psycopg
+from psycopg import sql
 
 from app.access.ports import PrincipalRepository
 from app.custody.ports import ArtifactRepository
@@ -75,12 +83,16 @@ SQL: Final[str] = "sql"
 BACKENDS: Final[tuple[str, ...]] = (MEMORY, SQL)
 
 DSN_VARIABLE: Final[str] = "APP_TEST_DATABASE_URL"
-DEFAULT_TEST_DSN: Final[str] = "postgresql://app:app@localhost:5432/app"
-"""Compose's `db` service on its published port. `make up`, and this address is live.
+DEFAULT_TEST_DSN: Final[str] = "postgresql://app:app@localhost:5432/app_test"
+"""Compose's `db` service on its published port, and a database no container knows about.
 
 Not `settings.database_url`, which says `@db:5432` -- a name that resolves on the compose network
-and not on the host the tests run on.
+and not on the host the tests run on. Not `app` either: that is the running system's database and
+the worker is claiming from it. See the module docstring.
 """
+
+MAINTENANCE_DATABASE: Final[str] = "postgres"
+"""Where `CREATE DATABASE` is issued from. Present in every Postgres install, ours included."""
 
 CONNECT_TIMEOUT_SECONDS: Final[int] = 3
 
@@ -205,8 +217,38 @@ def configured_dsn() -> str:
     return os.environ.get(DSN_VARIABLE) or DEFAULT_TEST_DSN
 
 
+def database_name(dsn: str) -> str:
+    """The database a DSN names, which is its path with the leading slash off."""
+    return urlsplit(to_psycopg_dsn(dsn)).path.lstrip("/")
+
+
+def _maintenance_dsn(dsn: str) -> str:
+    """The same server and credentials, pointed at a database that always exists."""
+    parsed = urlsplit(to_psycopg_dsn(dsn))
+    return urlunsplit(parsed._replace(path=f"/{MAINTENANCE_DATABASE}"))
+
+
+def ensure_database(dsn: str) -> str | None:
+    """Create the test database if the server has no such name yet.
+
+    `None` when it is there afterwards, a skip reason when the server could not be reached at
+    all. Autocommit, because `CREATE DATABASE` cannot run inside a transaction block.
+    """
+    name = database_name(dsn)
+    try:
+        with psycopg.connect(
+            _maintenance_dsn(dsn), connect_timeout=CONNECT_TIMEOUT_SECONDS, autocommit=True
+        ) as connection:
+            cursor = connection.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,))
+            if cursor.fetchone() is None:
+                connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+    except psycopg.OperationalError as error:
+        return f"no Postgres at {dsn}: {str(error).strip().splitlines()[0]}"
+    return None
+
+
 def prepare_database(dsn: str) -> str | None:
-    """Migrate the test database, or say why the SQL half of the suite cannot run.
+    """Create and migrate the test database, or say why the SQL half of the suite cannot run.
 
     `None` on success, a skip reason otherwise. An unreachable database is a skip rather than a
     failure: the suite has to pass on a checkout with no Docker, and the memory half still runs
@@ -214,6 +256,9 @@ def prepare_database(dsn: str) -> str | None:
     thing and is not swallowed -- `apply_migrations` raises, because a broken schema should stop
     the run rather than quietly halve it.
     """
+    unreachable = ensure_database(dsn)
+    if unreachable is not None:
+        return unreachable
     try:
         with psycopg.connect(
             to_psycopg_dsn(dsn), connect_timeout=CONNECT_TIMEOUT_SECONDS

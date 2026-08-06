@@ -7,3 +7,5 @@ __pycache__/
 data/artifacts/
 !data/artifacts/.gitkeep
 .claude/worktrees/
+# What scripts/demo.sh downloads. It is one of the committed fixtures, arriving the long way.
+lesson.mp4

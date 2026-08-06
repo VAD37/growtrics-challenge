@@ -45,7 +45,15 @@ docstring-code-format = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-q"
+# `-m 'not docker'` is the half of this that matters. `uv run pytest` has to pass on a checkout
+# with nothing running, and `tests/integration/compose_e2e_test.py` talks to a published port
+# that is only there after `make up`. Registering the marker alone would still collect it, so
+# the deselection lives here and `uv run pytest -m docker` overrides it -- the command line's
+# `-m` is read after these and wins.
+addopts = "-q -m 'not docker'"
+markers = [
+    "docker: needs the compose stack up (`make up`). Deselected by default; run with `-m docker`.",
+]
 # `tests/support/` is builders and backend wiring, imported by the contract suite and by the
 # memory-double tests. It is on the path explicitly rather than through pytest's per-directory
 # sys.path insertion, because that only reaches a sibling of the module being collected and

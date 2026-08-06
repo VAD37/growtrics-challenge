@@ -228,11 +228,26 @@ client polls, and `FAIL_ME` in the instruction reaches `FAILED` with `GENERATION
 - [x] `GET /v1/artifacts`, scoped, cursor paged, optional `?job_id=`, quarantined rows excluded
 - [x] `GET /v1/artifacts/{artifact_id}/content`, scoped, streamed from object storage, `ETag`
 - [x] `GET /v1/jobs/{id}` carries the primary artifact summary once succeeded
+- [x] `scripts/demo.sh` and `scripts/demo.ps1`: the walkthrough below, runnable, ending in a
+      sha256 against the committed lesson rather than a file size
+- [x] `tests/integration/pipeline_test.py`: the same walkthrough in one process over the memory
+      doubles, in `uv run pytest` on a checkout with no Docker and no Postgres
+- [x] `tests/integration/compose_e2e_test.py`: the same walkthrough over HTTP against `make up`,
+      marked `docker`, deselected by default, skipped cleanly when nothing answers (D110)
 
-Done when: the script below runs end to end from a clean checkout. It does, by hand; `PR D`
-writes it down as a test and a script.
+Done when: the script below runs end to end from a clean checkout. It does, and it is now written
+down twice rather than done by hand.
+
+Two things the run is honest about. `GET /v1/jobs/{id}` answers `200` to a second user id and not
+the `404` D1 asks for -- scope override item 1, stated in `orchestration/service.py::QueryJob` and
+pinned by an assertion in both integration tests so closing it flips a test rather than surprising
+somebody. And `GET /v1/artifacts` returns POSTER, PRIMARY and TRANSCRIPT ordered by id, so a
+client wanting the video reads `role`, which is what `job.artifact` carries for it.
 
 ## The demo
+
+`scripts/demo.sh [base-url]` is every call below, in order, with the download hashed at the end.
+`scripts/demo.ps1` is its twin. Neither needs `jq`.
 
 ```bash
 docker compose up -d
@@ -259,7 +274,14 @@ curl -H 'X-User-Id: u_demo' localhost:8000/v1/artifacts
 
 # 5
 curl -H 'X-User-Id: u_demo' -o lesson.mp4 localhost:8000/v1/artifacts/art_.../content
+
+# 6, and this is the step that makes it a proof
+sha256sum lesson.mp4 src/app/generation/backends/fixtures/lesson_a.mp4
+# -> the same digest twice
 ```
+
+`art_...` above is the **PRIMARY** row. Step 4 returns three, and the first one in the page is
+whichever id sorted lowest.
 
 ## What each cut costs to restore
 
