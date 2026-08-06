@@ -284,10 +284,16 @@ async def _serve() -> None:
     Postgres exits at start-up instead of logging a failed claim every two seconds forever. The
     bucket goes up with it for the same reason: a store with nowhere to put an artifact should
     stop the container, not the job that finally produced a video.
+
+    The open is inside the `try` because those are two steps and the second can fail. A bucket
+    that will not answer after the pool is already up would otherwise exit the process holding
+    connections Postgres keeps until the socket dies. `close_resources` is safe on an engine that
+    never opened, so the `finally` covers a half-finished start without a flag recording how far
+    it got.
     """
     adapters = build_adapters(settings)
-    await open_resources(adapters)
     try:
+        await open_resources(adapters)
         stop = asyncio.Event()
         _install_signal_handlers(stop)
         worker, sweep = build_worker(stop, adapters)
