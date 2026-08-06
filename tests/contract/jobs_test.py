@@ -143,7 +143,12 @@ async def test_count_active_keys_on_the_principal_whatever_the_scope_says(
 
 
 async def test_reads_apply_no_ownership_predicate(backend: StorageBackend) -> None:
-    """@audit the demo's whole authorisation model, asserted rather than described."""
+    """Both statements run unfiltered, and both adapters have to agree that they do.
+
+    `get` is unfiltered by decision (D111): the job id is the credential. @audit `list` is not
+    covered by that decision and returns every job in the database, which is the demo's whole
+    authorisation model, asserted here rather than described.
+    """
     theirs = await submit(backend, 1, principal_id=OTHER_PRINCIPAL)
 
     found = await backend.jobs.get(demo_scope(PRINCIPAL), theirs.job_id)

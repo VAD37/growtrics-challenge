@@ -13,7 +13,8 @@ What is deliberately absent, per the scope override:
 - No idempotency lookup, no replay branch, no `409` (item 2). Two identical submits mint two
   request keys and become two jobs.
 - No ownership predicate on any read (item 1). Every read still takes an `AccessScope` first
-  (D067), and every read site that ignores it says so with an `@audit`.
+  (D067). `QueryJob` ignores it by decision (D111): the job id is the capability. The listings
+  ignore it without one, and each says so with an `@audit`.
 """
 
 from collections.abc import Callable, Mapping
@@ -171,9 +172,10 @@ class QueryJob:
         self._jobs: JobRepository = jobs
 
     async def execute(self, scope: AccessScope, job_id: JobId) -> JobRecord:
-        # @audit no ownership check. The scope is passed and not consulted: any caller reads any
-        # job (scope override item 1, supersedes D067's enforcement half). `docs/demo.md` says a
-        # second user id gets 404 here; it does not, and that is the deliberate hole.
+        # The scope is deliberately not consulted (D111, supersedes D067's enforcement half).
+        # The job id is the capability: whoever holds one reads that job, and an id naming no row
+        # is JOB_NOT_FOUND. @audit that is a decision about this read, not about the system. The
+        # demo authenticates nobody, so there is no identity here to check the scope against.
         job = await self._jobs.get(scope, job_id)
         if job is None:
             raise DomainError(ErrorCode.JOB_NOT_FOUND)
@@ -195,7 +197,9 @@ class ListJobs:
     async def execute(
         self, scope: AccessScope, *, cursor: Cursor | None, limit: int
     ) -> Page[JobRecord]:
-        # @audit no ownership check. This lists every job in the database, not the caller's.
+        # @audit no ownership check. Both `JobRepository` adapters run an unfiltered statement, so
+        # this returns every job in the database, not the caller's. D111 decided the read above
+        # and not this one: a listing carries no id to stand in for a credential.
         return await self._jobs.list(
             scope, cursor=cursor, limit=_clamp_limit(limit, self._max_limit)
         )

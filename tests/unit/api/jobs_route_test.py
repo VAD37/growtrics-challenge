@@ -108,20 +108,20 @@ def test_reading_a_job_answers_the_document(
     assert body["progress"]["percent"] == 60
 
 
-def test_an_unknown_job_is_404(client: TestClient) -> None:
+def test_an_unknown_job_is_404_in_the_error_envelope(client: TestClient) -> None:
+    """The refusal D111 keeps, checked at the edge as a status and a code, not just a status."""
     response = client.get("/v1/jobs/job_" + "0" * 26)
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "JOB_NOT_FOUND"
 
 
-def test_another_users_job_reads_200_and_returns_the_job(
+def test_a_second_user_reads_the_first_users_job(
     client: TestClient, job_service: FakeJobService
 ) -> None:
-    """@audit THIS IS THE MISSING AUTHORISATION, WRITTEN AS A TEST.
+    """D111 at the route: the job id is the credential, so `X-User-Id` changes nothing here.
 
-    A real API answers 404 here, and `docs/demo.md` stage D1 says so. The scope override made
-    this a free demo with no authorisation at all, so user B reads user A's job and gets it.
-    Restoring the check turns this 200 into a JOB_NOT_FOUND and deletes this test.
+    Worth its own test rather than being left to the use case, because the header is the only
+    thing an HTTP caller can vary, and this is the assertion that says varying it is allowed.
     """
     job = job_service.load(make_job(principal_id="u_alice"))
     response = client.get(f"/v1/jobs/{job.job_id}", headers={"X-User-Id": "u_bob"})
