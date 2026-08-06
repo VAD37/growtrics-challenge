@@ -1,0 +1,10 @@
+# Ionic or covalent, told apart
+
+1. Both bonds are atoms chasing a full outer shell. The only question is whether an electron gets handed over or held between them.
+2. Sodium carries one spare electron in its outer shell. Chlorine is one electron short of a full one. Between them there is an obvious deal.
+3. Chlorine pulls far harder than sodium, so it simply takes the electron. Sodium is left positive, chlorine is left negative.
+4. Opposite charges attract, and that pull is the ionic bond. Millions of these ions stack into a lattice, which is why salt is a hard crystal.
+5. Now take two hydrogen atoms. They pull with equal strength, so neither can take anything. They settle for holding a pair of electrons between them.
+6. That shared pair is a covalent bond, and it makes a molecule, a small unit with a fixed number of atoms in it.
+7. Side by side, the difference is the size of the gap in pulling power, and everything else follows from it.
+8. So in the exam, check the elements first. A metal with a non-metal means transfer and ions. Two non-metals means sharing and molecules.

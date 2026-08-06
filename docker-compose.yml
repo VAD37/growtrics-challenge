@@ -41,6 +41,12 @@ x-app-env: &app-env
   APP_JOB_STALE_SECONDS: ${APP_JOB_STALE_SECONDS:-900}
   APP_JOB_PENDING_MAX_SECONDS: ${APP_JOB_PENDING_MAX_SECONDS:-3600}
   APP_SWEEP_INTERVAL_SECONDS: ${APP_SWEEP_INTERVAL_SECONDS:-60.0}
+  # How long the mock generation backend pretends to render for, as a uniform draw. Long on
+  # purpose: the demo polls a job and watches it move, and a stage that finishes in a second is
+  # a job already SUCCEEDED by the time the first GET lands. At these bounds it is visibly
+  # RUNNING at GENERATING and 60% while a client polls it.
+  APP_MOCK_DELAY_MIN_SECONDS: ${APP_MOCK_DELAY_MIN_SECONDS:-10.0}
+  APP_MOCK_DELAY_MAX_SECONDS: ${APP_MOCK_DELAY_MAX_SECONDS:-60.0}
   APP_JOB_STREAM_TICK_SECONDS: ${APP_JOB_STREAM_TICK_SECONDS:-1.0}
   APP_JOB_STREAM_HEARTBEAT_SECONDS: ${APP_JOB_STREAM_HEARTBEAT_SECONDS:-15.0}
   APP_JOB_STREAM_MAX_SECONDS: ${APP_JOB_STREAM_MAX_SECONDS:-900.0}

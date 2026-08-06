@@ -72,6 +72,21 @@ class Settings(BaseSettings):
     connection and a backlog does not.
     """
 
+    # --- mock generation -----------------------------------------------------------
+    mock_delay_min_seconds: float = 10.0
+    mock_delay_max_seconds: float = 60.0
+    """How long the mock backend pretends to render for: a uniform draw between the two.
+
+    Deliberately long. The demo's third step is polling a job and watching it move, and a
+    generation stage that finishes in a second is a job that is `SUCCEEDED` by the time the
+    first `GET /v1/jobs/{job_id}` lands. At these bounds the job is visibly `RUNNING` at
+    `GENERATING` and 60% for as long as it takes a reviewer to read the response, and two jobs
+    submitted together do not finish in lockstep.
+
+    Read by `app/generation/backends/mock.py` as its constructor defaults; the composition root
+    passes its own when it wires the backend up.
+    """
+
     # --- job event stream ----------------------------------------------------------
     job_stream_tick_seconds: float = 1.0
     """How often an open `GET /v1/jobs/{job_id}/events` re-reads its job.

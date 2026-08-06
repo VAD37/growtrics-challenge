@@ -251,14 +251,19 @@ async def test_harvest_refuses_a_hostile_path_before_it_reaches_the_source() -> 
 
 async def test_harvest_runs_end_to_end_against_the_mock_backend() -> None:
     """The one test that exercises the real seam: mock backend, real ACL, real harvest."""
-    backend = MockGenerationBackend(delay_seconds=0.0)
+    backend = MockGenerationBackend(delay_min_seconds=0.0, delay_max_seconds=0.0)
     request: GenerationRequest = generation_request()
     payload = await backend.generate(request)
 
     harvested = await Harvester(backend).harvest(payload, CONTRACT, session_id=request.session_id)
 
     by_role = {item.descriptor.role: item for item in harvested}
-    assert set(by_role) == {ArtifactRole.PRIMARY, ArtifactRole.LOG}
+    assert set(by_role) == {
+        ArtifactRole.PRIMARY,
+        ArtifactRole.POSTER,
+        ArtifactRole.TRANSCRIPT,
+        ArtifactRole.LOG,
+    }
     assert by_role[ArtifactRole.PRIMARY].data[4:8] == b"ftyp"
     assert by_role[ArtifactRole.PRIMARY].claim_agreed is True
     assert by_role[ArtifactRole.LOG].descriptor.rel_path == LOG_REL_PATH
