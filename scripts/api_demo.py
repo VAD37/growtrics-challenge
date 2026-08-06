@@ -438,9 +438,13 @@ def step_poll(api: Api, job_id: str, poll_seconds: float, poll_timeout: float) -
 
 
 def step_list_jobs(api: Api) -> None:
-    heading(api.ink, "3", "GET /v1/jobs -- everything this caller has submitted")
-    print("    Scoped to the X-User-Id above. Listed jobs carry artifact: null even when they")
-    print("    have one; the detail read fills that in.")
+    heading(api.ink, "3", "GET /v1/jobs -- every job in the system, newest first")
+    print("    Not scoped to the X-User-Id above, despite the header being sent: the listing")
+    print("    applies no ownership predicate, so it returns everybody's jobs. That is a known")
+    print("    hole and it is marked @audit at orchestration/service.py::ListJobs. D111 decided")
+    print("    the single-job read and deliberately left this one open.")
+    print("    Listed jobs carry artifact: null even when they have one; the detail read in")
+    print("    step 2 is what fills that in.")
     print()
     reply = api.send("GET", "/v1/jobs")
     if reply.status != 200:
