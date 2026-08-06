@@ -9,3 +9,5 @@ data/artifacts/
 .claude/worktrees/
 # What scripts/demo.sh downloads. It is one of the committed fixtures, arriving the long way.
 lesson.mp4
+# Where scripts/api_demo.py writes every artifact it downloads, for the same reason.
+demo-out/

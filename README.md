@@ -16,6 +16,22 @@ lesson the backend serves from, or are not. Expect it to take a minute; the mock
 deliberately pretends to render for 10 to 60 seconds so a job can be caught mid-flight. Nothing
 is claimed that the script did not watch happen.
 
+## The narrated version
+
+```bash
+python scripts/api_demo.py                        # against http://localhost:8000
+python scripts/api_demo.py --out-dir ./demo-out --no-color
+```
+
+`scripts/api_demo.py` walks the same six endpoints with the whole conversation on screen: for
+every call, the method and path, the headers that carry meaning, the request body, the status,
+the milliseconds and the response body. It downloads all three artifacts rather than only the
+video, checks each one against the `ETag` the server sent, ends on the same sha256 verdict
+against the committed lesson, and then asks for a job that does not exist so the `404` envelope
+is in the transcript too. Standard library only, so any Python 3.9 or newer runs it with nothing
+installed: no `uv sync`, no `requests`, no `jq`, no `curl`. It imports nothing from `src/app`,
+because a client built out of the server's own code proves less than one that never sees it.
+
 Then `curl localhost:8000/health`. MinIO console is on `localhost:9001`.
 
 The video is a committed fixture, not a rendered lesson; everything around it is real. Scope and
