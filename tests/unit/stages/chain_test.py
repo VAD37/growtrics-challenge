@@ -83,7 +83,7 @@ async def test_a_command_becomes_an_artifact_row() -> None:
     assert OUTPUT_CONTRACT_FILE in bundle.paths()
 
     # 4. BriefBundle -> GenerationOutcome (untrusted, what a worker claims)
-    backend = MockGenerationBackend(delay_seconds=0.0)
+    backend = MockGenerationBackend(delay_min_seconds=0.0, delay_max_seconds=0.0)
     payload = await backend.generate(
         GenerationRequest(
             session_id=session_id,
@@ -98,6 +98,8 @@ async def test_a_command_becomes_an_artifact_row() -> None:
     harvested = await Harvester(backend).harvest(payload, CONTRACT, session_id=session_id)
     assert {item.descriptor.role for item in harvested} == {
         ArtifactRole.PRIMARY,
+        ArtifactRole.POSTER,
+        ArtifactRole.TRANSCRIPT,
         ArtifactRole.LOG,
     }
 
